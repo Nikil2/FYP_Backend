@@ -1,0 +1,313 @@
+// ============================================
+// CONFIGURATION
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  extensions = [postgis] // Required for distance-based searching
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  ADMIN
+  CUSTOMER
+  WORKER
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BookingStatus {
+  PENDING
+  NEGOTIATION
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  PRICE_PROPOSAL
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COUNTERED
+}
+
+// ============================================
+// 1. IDENTITY & PROFILES
+// ============================================
+
+model User {
+  id            String    @id @default(uuid())
+  phoneNumber   String    @unique
+  fullName      String
+  profilePicUrl String?
+  role          UserRole  @default(CUSTOMER)
+  isVerified    Boolean   @default(false)
+  isBlocked     Boolean   @default(false)
+  fcmToken      String?   // For Push Notifications
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  workerProfile   WorkerProfile?
+  adminProfile    AdminProfile?
+  savedLocations  SavedLocation[]
+  bookings        Booking[]        @relation("CustomerBookings")
+  messages        Message[]
+  notifications   Notification[]
+  feedbackGiven   Feedback[]
+}
+
+model WorkerProfile {
+  id                 String             @id @default(uuid())
+  userId             String             @unique
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Professional Details
+  cnicNumber         String             @unique
+  cnicFrontUrl       String
+  cnicBackUrl        String
+  bio                String?            @db.Text
+  experienceYears    Int                @default(0)
+  visitingCharges    Decimal            @db.Decimal(10, 2)
+  
+  // Location Logic
+  homeAddress        String
+  homeLat            Float
+  homeLng            Float
+  liveLat            Float?             
+  liveLng            Float?
+  isOnline           Boolean            @default(false)
+  
+  // Metrics
+  verificationStatus VerificationStatus @default(PENDING)
+  averageRating      Decimal            @default(0) @db.Decimal(2, 1)
+  totalJobsCompleted Int                @default(0)
+
+  // Relations
+  services           WorkerService[]
+  bookings           Booking[]          @relation("WorkerJobs")
+  approvalQueue      ApprovalQueue[]
+  portfolio          WorkerPortfolio[]
+  schedule           WorkerSchedule[]
+  locationHistory    WorkerLocationHistory[]
+}
+
+model AdminProfile {
+  id            String          @id @default(uuid())
+  userId        String          @unique
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adminLevel    String          @default("MODERATOR")
+  
+  approvals     ApprovalQueue[]
+  complaints    Complaint[]
+}
+
+// ============================================
+// 2. SERVICES & SEARCH
+// ============================================
+
+model Service {
+  id          Int             @id @default(autoincrement())
+  name        String          @unique
+  iconUrl     String?
+  isActive    Boolean         @default(true)
+
+  workers     WorkerService[]
+  bookings    Booking[]
+}
+
+model WorkerService {
+  workerId    String
+  serviceId   Int
+  worker      WorkerProfile   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  service     Service         @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([workerId, serviceId])
+}
+
+// ============================================
+// 3. BOOKING & NEGOTIATION
+// ============================================
+
+model Booking {
+  id              String         @id @default(uuid())
+  customerId      String
+  customer        User           @relation("CustomerBookings", fields: [customerId], references: [id])
+  workerId        String
+  worker          WorkerProfile  @relation("WorkerJobs", fields: [workerId], references: [id])
+  serviceId       Int
+  service         Service        @relation(fields: [serviceId], references: [id])
+
+  description     String         @db.Text
+  jobAddress      String
+  jobLat          Float
+  jobLng          Float
+  status          BookingStatus  @default(PENDING)
+  finalPrice      Decimal?       @db.Decimal(10, 2)
+  scheduledAt     DateTime?
+  createdAt       DateTime       @default(now())
+
+  chat            Chat?
+  proposals       PriceProposal[]
+  feedback        Feedback?
+  complaints      Complaint[]
+}
+
+model PriceProposal {
+  id            String         @id @default(uuid())
+  bookingId     String
+  booking       Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  proposedBy    String         // userId of the worker
+  amount        Decimal        @db.Decimal(10, 2)
+  status        ProposalStatus @default(PENDING)
+  createdAt     DateTime       @default(now())
+
+  counterOffers CounterOffer[]
+}
+
+model CounterOffer {
+  id            String         @id @default(uuid())
+  proposalId    String
+  proposal      PriceProposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  proposedBy    String         // userId of the customer
+  amount        Decimal        @db.Decimal(10, 2)
+  createdAt     DateTime       @default(now())
+}
+
+// ============================================
+// 4. CHAT & TRACKING
+// ============================================
+
+model Chat {
+  id          String    @id @default(uuid())
+  bookingId   String    @unique
+  booking     Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+}
+
+model Message {
+  id          String      @id @default(uuid())
+  chatId      String
+  chat        Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      User        @relation(fields: [senderId], references: [id])
+  content     String      @db.Text
+  type        MessageType @default(TEXT)
+  createdAt   DateTime    @default(now())
+}
+
+model WorkerLocationHistory {
+  id          String        @id @default(uuid())
+  workerId    String
+  worker      WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  lat         Float
+  lng         Float
+  timestamp   DateTime      @default(now())
+}
+
+// ============================================
+// 5. GOVERNANCE & UTILITY
+// ============================================
+
+model ApprovalQueue {
+  id          String             @id @default(uuid())
+  workerId    String
+  worker      WorkerProfile      @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  adminId     String?
+  admin       AdminProfile?      @relation(fields: [adminId], references: [id])
+  status      VerificationStatus @default(PENDING)
+  notes       String?
+  createdAt   DateTime           @default(now())
+}
+
+model Feedback {
+  id          String   @id @default(uuid())
+  bookingId   String   @unique
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  userId      String   // Reviewer
+  user        User     @relation(fields: [userId], references: [id])
+  rating      Int      
+  comment     String?
+  createdAt   DateTime @default(now())
+}
+
+model Complaint {
+  id          String   @id @default(uuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id])
+  adminId     String?
+  admin       AdminProfile? @relation(fields: [adminId], references: [id])
+  description String   @db.Text
+  isResolved  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  evidence    DisputeEvidence[]
+}
+
+model DisputeEvidence {
+  id            String    @id @default(uuid())
+  complaintId   String
+  complaint     Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  fileUrl       String
+  uploadedAt    DateTime  @default(now())
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  body        String
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
+model SavedLocation {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  address     String
+  lat         Float
+  lng         Float
+}
+
+model WorkerPortfolio {
+  id          String        @id @default(uuid())
+  workerId    String
+  worker      WorkerProfile @relation(fields: [workerId], references: [id])
+  imageUrl    String
+  description String?
+}
+
+model WorkerSchedule {
+  id          String        @id @default(uuid())
+  workerId    String
+  worker      WorkerProfile @relation(fields: [workerId], references: [id])
+  dayOfWeek   Int           
+  startTime   String        
+  endTime     String        
+}
+
+
