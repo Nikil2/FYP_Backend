@@ -59,6 +59,7 @@ enum ProposalStatus {
 model User {
   id            String    @id @default(uuid())
   phoneNumber   String    @unique
+  password      String    // Hashed password
   fullName      String
   profilePicUrl String?
   role          UserRole  @default(CUSTOMER)
