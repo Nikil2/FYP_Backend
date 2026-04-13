@@ -1,0 +1,291 @@
+### ==================================================
+### WORKER REGISTRATION & PORTFOLIO API TESTS
+### ==================================================
+
+### Setup Variables
+@baseUrl = http://localhost:3000
+@workerId = worker-id-from-response
+@portfolioId = portfolio-id-from-response
+@serviceId1 = 1
+@serviceId2 = 2
+
+### ==================================================
+### 1. GET SERVICES (For Worker Registration)
+### ==================================================
+
+### Get All Services (43 Total)
+GET {{baseUrl}}/services
+Content-Type: application/json
+
+### Get Active Services Only
+GET {{baseUrl}}/services/active
+Content-Type: application/json
+
+### Get Services List
+GET {{baseUrl}}/services/list/all
+Content-Type: application/json
+
+### Get Service by ID
+GET {{baseUrl}}/services/1
+Content-Type: application/json
+
+### ==================================================
+### 2. WORKER REGISTRATION WITH SERVICES & PORTFOLIO
+### ==================================================
+
+### Register New Worker - Plumber (with services and portfolio images)
+POST {{baseUrl}}/workers/register
+Content-Type: application/json
+
+{
+  "phoneNumber": "+923001234567",
+  "password": "SecurePass123!",
+  "fullName": "Ali Ahmed Khan",
+  "cnicNumber": "12345-6789012-3",
+  "cnicFrontUrl": "https://example.com/cnic-front.jpg",
+  "cnicBackUrl": "https://example.com/cnic-back.jpg",
+  "homeAddress": "123 Main Street, Karachi",
+  "homeLat": 24.8615,
+  "homeLng": 67.0099,
+  "experienceYears": 5,
+  "visitingCharges": 500,
+  "bio": "Professional plumber with 5 years of experience",
+  "serviceIds": [7, 8, 9, 10, 11, 12],
+  "portfolioImages": [
+    {
+      "imageUrl": "https://example.com/portfolio1.jpg",
+      "description": "Bathroom renovation project"
+    },
+    {
+      "imageUrl": "https://example.com/portfolio2.jpg",
+      "description": "Kitchen pipe installation"
+    },
+    {
+      "imageUrl": "https://example.com/portfolio3.jpg",
+      "description": "Water leak repair"
+    }
+  ]
+}
+
+### Register Worker - Electrician Services
+POST {{baseUrl}}/workers/register
+Content-Type: application/json
+
+{
+  "phoneNumber": "+923009876543",
+  "password": "SecurePass123!",
+  "fullName": "Hassan Ali",
+  "cnicNumber": "09876-5432109-8",
+  "cnicFrontUrl": "https://example.com/cnic-front2.jpg",
+  "cnicBackUrl": "https://example.com/cnic-back2.jpg",
+  "homeAddress": "456 Electric Road, Lahore",
+  "homeLat": 31.5204,
+  "homeLng": 74.3587,
+  "experienceYears": 8,
+  "visitingCharges": 800,
+  "bio": "Expert electrician with customer satisfaction",
+  "serviceIds": [1, 2, 3, 4, 5, 6],
+  "portfolioImages": [
+    {
+      "imageUrl": "https://example.com/electrical1.jpg",
+      "description": "Home wiring installation"
+    },
+    {
+      "imageUrl": "https://example.com/electrical2.jpg",
+      "description": "Fan and light installation"
+    }
+  ]
+}
+
+### ==================================================
+### 3. GET WORKER DETAILS (with services and portfolio)
+### ==================================================
+
+### Get Worker by ID
+GET {{baseUrl}}/workers/worker-id-here
+Content-Type: application/json
+
+### Get All Workers (paginated)
+GET {{baseUrl}}/workers?skip=0&take=10
+Content-Type: application/json
+
+### Get Verified Workers
+GET {{baseUrl}}/workers/verified?skip=0&take=10
+Content-Type: application/json
+
+### ==================================================
+### 4. PORTFOLIO MANAGEMENT
+### ==================================================
+
+### Add Portfolio Image
+POST {{baseUrl}}/workers/{{workerId}}/portfolio
+Content-Type: application/json
+
+{
+  "imageUrl": "https://example.com/new-portfolio.jpg",
+  "description": "Luxury bathroom renovation 2024"
+}
+
+### Get Portfolio Images
+GET {{baseUrl}}/workers/{{workerId}}/portfolio
+Content-Type: application/json
+
+### Update Portfolio Image Description
+PUT {{baseUrl}}/workers/{{workerId}}/portfolio/{{portfolioId}}
+Content-Type: application/json
+
+{
+  "description": "Updated description - Professional plumbing work"
+}
+
+### Delete Portfolio Image
+DELETE {{baseUrl}}/workers/{{workerId}}/portfolio/{{portfolioId}}
+Content-Type: application/json
+
+### ==================================================
+### 5. UPDATE WORKER PROFILE
+### ==================================================
+
+### Update Worker Profile
+PUT {{baseUrl}}/workers/worker-id-here
+Content-Type: application/json
+
+{
+  "fullName": "Ali Ahmed Khan Updated",
+  "bio": "Updated bio - 6 years of experience",
+  "experienceYears": 6,
+  "visitingCharges": 600
+}
+
+### ==================================================
+### SERVICE REFERENCE - ALL 43 SERVICES
+### ==================================================
+
+# ELECTRICIAN (IDs: 1-6)
+# 1. Wiring & Rewiring ⚡
+# 2. Switch & Socket Repair 🔌
+# 3. Fan Installation & Repair 💨
+# 4. Light Fitting Installation 💡
+# 5. Circuit Breaker & DB Board 🔋
+# 6. UPS & Inverter Installation 🔌
+
+# PLUMBER (IDs: 7-12)
+# 7. Leak Repair 💧
+# 8. Pipe Installation 🔧
+# 9. Tap & Faucet Repair 🚰
+# 10. Toilet Repair 🚽
+# 11. Drain Cleaning 🌊
+# 12. Geyser Installation 🔥
+
+# CARPENTER (IDs: 13-17)
+# 13. Door Repair & Installation 🚪
+# 14. Cabinet Making 📦
+# 15. Furniture Repair 🪑
+# 16. Shelf Installation 📚
+# 17. Wood Polishing ✨
+
+# PAINTER (IDs: 18-22)
+# 18. Wall Painting 🎨
+# 19. Exterior Painting 🏠
+# 20. Wood Painting & Polish 🪵
+# 21. Waterproofing 🌧️
+# 22. Texture & Design Work 🎭
+
+# AC TECHNICIAN (IDs: 23-27)
+# 23. AC Installation ❄️
+# 24. AC Repair 🔧
+# 25. AC General Service 🌬️
+# 26. Gas Refilling ⛽
+# 27. AC Deep Cleaning ✨
+
+# MASON (IDs: 28-32)
+# 28. Wall Construction 🧱
+# 29. Tile Work 🟫
+# 30. Plastering 🎨
+# 31. Flooring ⬜
+# 32. Demolition Work 💥
+
+# MECHANIC (IDs: 33-37)
+# 33. Bike Repair 🏍️
+# 34. Car Repair 🚗
+# 35. Oil Change 🛢️
+# 36. Tire Puncture & Change 🛞
+# 37. Battery Service 🔋
+
+# HOME CLEANER (IDs: 38-42)
+# 38. Full Home Cleaning 🧹
+# 39. Kitchen Deep Clean 🍳
+# 40. Bathroom Cleaning 🚿
+# 41. Sofa & Carpet Cleaning 🛋️
+# 42. Water Tank Cleaning 💧
+
+# TAILORING (IDs: 43-45)
+# 43. Ladies Tailoring 👗
+# 44. Gents Tailoring 👔
+# 45. Alterations & Repairs 🧵
+
+# CAR CARE (IDs: 46-49)
+# 46. Car Wash 🚗
+# 47. Car Maintenance 🔧
+# 48. Tire & Puncture Service 🛞
+# 49. Car Interior Cleaning 🧹
+
+# HOME CONSTRUCTION (IDs: 50-53)
+# 50. Mason & Tile Work 🧱
+# 51. Carpenter Services 🪵
+# 52. Painter Services 🎨
+# 53. Welding & Iron Work ⚙️
+
+# PEST CONTROL (ID: 54)
+# 54. Pest Control 🐜
+
+### ==================================================
+### WORKFLOW EXAMPLES
+### ==================================================
+
+### Example 1: Complete Worker Registration Flow
+# Step 1: Fetch all services
+GET {{baseUrl}}/services/active
+
+# Step 2: Worker selects services (e.g., serviceIds: [7,8,9,10,11,12] for Plumber)
+# Step 3: Register with selected services and portfolio
+POST {{baseUrl}}/workers/register
+
+# Step 4: Get worker details (includes services and portfolio)
+GET {{baseUrl}}/workers/worker-id
+
+# Step 5: Add more portfolio images later
+POST {{baseUrl}}/workers/{{workerId}}/portfolio
+
+### Example 2: List Services for Frontend
+# Frontend calls this endpoint to get all available services
+GET {{baseUrl}}/services/list/all
+
+# Response contains all 43 services with:
+# - id: Unique service ID
+# - name: Service name
+# - iconUrl: Icon/emoji for display
+# - isActive: Whether service is available
+
+### ==================================================
+### RUNNING THE SEED
+### ==================================================
+
+# Before testing, run the seed script:
+# npx prisma db seed
+
+# This will create all 43 services in the database
+
+### ==================================================
+### NOTES & TIPS
+### ==================================================
+
+# All 43 services are seeded into database
+# Service IDs auto-increment from 1
+# Use GET /services or /services/active to fetch dynamically
+# Icons stored as emoji in database (optional but nice for UI)
+# Services can be filtered by active status
+# Workers select multiple services during signup
+# Portfolio images stored separately per worker
+# Each service can have multiple workers offering it
+# Each worker can offer multiple services
