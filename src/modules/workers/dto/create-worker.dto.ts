@@ -54,6 +54,15 @@ export class CreateWorkerDto {
   @IsNotEmpty()
   cnicBackUrl: string;
 
+  @IsOptional()
+  @IsUrl()
+  selfieUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsUrl({}, { each: true })
+  workPhotosUrls?: string[];
+
   @IsString()
   @IsNotEmpty()
   homeAddress: string;
