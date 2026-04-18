@@ -27,6 +27,8 @@ export class WorkersService {
       cnicNumber,
       cnicFrontUrl,
       cnicBackUrl,
+      selfieUrl,
+      workPhotosUrls,
       homeAddress,
       homeLat,
       homeLng,
@@ -74,6 +76,12 @@ export class WorkersService {
       throw new BadRequestException('Some services do not exist');
     }
 
+    // Accept both legacy portfolioImages and direct Cloudinary URL arrays from frontend.
+    const normalizedPortfolioImages = [
+      ...(portfolioImages || []),
+      ...((workPhotosUrls || []).map((imageUrl) => ({ imageUrl }))),
+    ].filter((portfolio) => Boolean(portfolio?.imageUrl));
+
     try {
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -86,7 +94,7 @@ export class WorkersService {
             phoneNumber,
             password: hashedPassword,
             fullName,
-            profilePicUrl,
+            profilePicUrl: profilePicUrl || selfieUrl,
             fcmToken,
             role: UserRole.WORKER,
             isVerified: false,
@@ -121,13 +129,13 @@ export class WorkersService {
         }
 
         // Create portfolio images if provided
-        if (portfolioImages && portfolioImages.length > 0) {
-          for (const portfolio of portfolioImages) {
+        if (normalizedPortfolioImages.length > 0) {
+          for (const portfolio of normalizedPortfolioImages) {
             await tx.workerPortfolio.create({
               data: {
                 workerId: workerProfile.id,
                 imageUrl: portfolio.imageUrl,
-                description: portfolio.description || null,
+                // description: portfolio.description || null,
               },
             });
           }
