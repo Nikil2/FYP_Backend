@@ -2,6 +2,40 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+async function seedAdminUser() {
+  console.log('🔐 Seeding admin user...');
+
+  const adminExists = await prisma.user.findFirst({
+    where: { phoneNumber: 'n-admin' },
+  });
+
+  if (adminExists) {
+    console.log('✅ Admin user already exists');
+    return;
+  }
+
+  const adminUser = await prisma.user.create({
+    data: {
+      phoneNumber: 'n-admin',
+      password: 'Adm12345', // In production, use bcrypt.hash()
+      fullName: 'Admin User',
+      role: 'ADMIN',
+      isVerified: true,
+      isBlocked: false,
+      adminProfile: {
+        create: {
+          adminLevel: 'SUPER_ADMIN',
+        },
+      },
+    },
+    include: {
+      adminProfile: true,
+    },
+  });
+
+  console.log(`✅ Admin user created: ${adminUser.phoneNumber} (ID: ${adminUser.id})`);
+}
+
 const servicesData = [
   // ============================================
   // 1. ELECTRICIAN - 6 Services
@@ -107,7 +141,13 @@ const servicesData = [
 ];
 
 async function main() {
-  console.log('🌱 Starting seed with 43 comprehensive services...');
+  console.log('🌱 Starting seed with admin user and 43 comprehensive services...');
+
+  // Seed admin user first
+  await seedAdminUser();
+
+  console.log('');
+  console.log('🌱 Seeding services...');
 
   for (const service of servicesData) {
     const created = await prisma.service.upsert({
