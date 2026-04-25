@@ -160,6 +160,37 @@ export class AdminController {
     };
   }
 
+  // ==================== JOBS / BOOKINGS ====================
+
+  /**
+   * Get jobs/bookings with filtering and pagination.
+   * GET /admin/jobs?page=1&limit=20&status=ACTIVE&search=
+   */
+  @Get('jobs')
+  async getJobs(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    const parsedPage = Number(page) > 0 ? Number(page) : 1;
+    const parsedLimit = Number(limit) > 0 ? Number(limit) : 20;
+
+    return this.adminService.getJobs(parsedPage, parsedLimit, status, search);
+  }
+
+  /**
+   * Get one job/booking with end-to-end details.
+   * GET /admin/jobs/:id
+   */
+  @Get('jobs/:id')
+  async getJobById(@Param('id') jobId: string) {
+    const job = await this.adminService.getJobById(jobId);
+    return {
+      data: job,
+    };
+  }
+
   // ==================== COMPLAINT MANAGEMENT ====================
 
   /**

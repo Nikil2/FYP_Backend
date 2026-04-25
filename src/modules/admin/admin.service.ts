@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AdminResponseDto, DashboardResponseDto, WorkerQualityDto, DashboardActivityDto } from './dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
@@ -610,6 +615,296 @@ export class AdminService {
     });
 
     return complaint;
+  }
+
+  /**
+   * Get live and historical jobs/bookings with worker, customer, and service metadata.
+   */
+  async getJobs(
+    page: number = 1,
+    limit: number = 20,
+    status?: string,
+    search?: string,
+  ) {
+    const skip = (page - 1) * limit;
+    const where: any = {};
+    const normalizedStatus = status?.trim().toUpperCase();
+
+    if (normalizedStatus && normalizedStatus !== 'ALL') {
+      if (normalizedStatus === 'ACTIVE') {
+        where.status = {
+          in: ['PENDING', 'NEGOTIATION', 'ACCEPTED', 'IN_PROGRESS'],
+        };
+      } else {
+        where.status = normalizedStatus;
+      }
+    }
+
+    if (search) {
+      where.OR = [
+        { id: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { jobAddress: { contains: search, mode: 'insensitive' } },
+        { customer: { fullName: { contains: search, mode: 'insensitive' } } },
+        { customer: { phoneNumber: { contains: search } } },
+        { worker: { id: { contains: search, mode: 'insensitive' } } },
+        { worker: { user: { fullName: { contains: search, mode: 'insensitive' } } } },
+        { worker: { user: { phoneNumber: { contains: search } } } },
+        { service: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [jobs, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          customer: {
+            select: {
+              id: true,
+              fullName: true,
+              phoneNumber: true,
+              profilePicUrl: true,
+            },
+          },
+          worker: {
+            select: {
+              id: true,
+              verificationStatus: true,
+              averageRating: true,
+              totalJobsCompleted: true,
+              isOnline: true,
+              user: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  phoneNumber: true,
+                  profilePicUrl: true,
+                  isBlocked: true,
+                },
+              },
+            },
+          },
+          service: {
+            select: {
+              id: true,
+              name: true,
+              iconUrl: true,
+            },
+          },
+          _count: {
+            select: {
+              messages: true,
+              proposals: true,
+              complaints: true,
+            },
+          },
+        },
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    return {
+      data: jobs.map((job) => ({
+        id: job.id,
+        status: job.status,
+        description: job.description,
+        jobAddress: job.jobAddress,
+        finalPrice: job.finalPrice ? Number(job.finalPrice) : null,
+        scheduledAt: job.scheduledAt,
+        createdAt: job.createdAt,
+        customerId: job.customerId,
+        workerId: job.workerId,
+        serviceId: job.serviceId,
+        customer: job.customer,
+        worker: {
+          id: job.worker.id,
+          verificationStatus: job.worker.verificationStatus,
+          averageRating: Number(job.worker.averageRating),
+          totalJobsCompleted: job.worker.totalJobsCompleted,
+          isOnline: job.worker.isOnline,
+          user: job.worker.user,
+        },
+        service: job.service,
+        counts: {
+          messages: job._count.messages,
+          proposals: job._count.proposals,
+          complaints: job._count.complaints,
+        },
+      })),
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Get full end-to-end details for a single job/booking.
+   */
+  async getJobById(bookingId: string) {
+    const job = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            fullName: true,
+            phoneNumber: true,
+            profilePicUrl: true,
+            isBlocked: true,
+            createdAt: true,
+          },
+        },
+        worker: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                phoneNumber: true,
+                profilePicUrl: true,
+                isBlocked: true,
+                isVerified: true,
+              },
+            },
+            services: {
+              include: {
+                service: {
+                  select: {
+                    id: true,
+                    name: true,
+                    iconUrl: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            iconUrl: true,
+          },
+        },
+        proposals: {
+          orderBy: { createdAt: 'desc' },
+        },
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            sender: {
+              select: {
+                id: true,
+                fullName: true,
+                phoneNumber: true,
+              },
+            },
+          },
+        },
+        complaints: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            admin: {
+              select: {
+                id: true,
+                adminLevel: true,
+                user: {
+                  select: {
+                    fullName: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        feedback: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                phoneNumber: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!job) {
+      throw new NotFoundException('Job not found');
+    }
+
+    return {
+      id: job.id,
+      status: job.status,
+      description: job.description,
+      jobAddress: job.jobAddress,
+      jobLat: job.jobLat,
+      jobLng: job.jobLng,
+      finalPrice: job.finalPrice ? Number(job.finalPrice) : null,
+      scheduledAt: job.scheduledAt,
+      createdAt: job.createdAt,
+      customerId: job.customerId,
+      workerId: job.workerId,
+      serviceId: job.serviceId,
+      customer: job.customer,
+      worker: {
+        id: job.worker.id,
+        cnicNumber: job.worker.cnicNumber,
+        experienceYears: job.worker.experienceYears,
+        visitingCharges: Number(job.worker.visitingCharges),
+        homeAddress: job.worker.homeAddress,
+        verificationStatus: job.worker.verificationStatus,
+        averageRating: Number(job.worker.averageRating),
+        totalJobsCompleted: job.worker.totalJobsCompleted,
+        isOnline: job.worker.isOnline,
+        user: job.worker.user,
+        services: job.worker.services.map((entry) => entry.service),
+      },
+      service: job.service,
+      proposals: job.proposals.map((proposal) => ({
+        id: proposal.id,
+        bookingId: proposal.bookingId,
+        proposedBy: proposal.proposedBy,
+        amount: Number(proposal.amount),
+        status: proposal.status,
+        parentId: proposal.parentId,
+        createdAt: proposal.createdAt,
+      })),
+      messages: job.messages.map((message) => ({
+        id: message.id,
+        senderId: message.senderId,
+        content: message.content,
+        type: message.type,
+        createdAt: message.createdAt,
+        sender: message.sender,
+      })),
+      complaints: job.complaints,
+      feedback: job.feedback
+        ? {
+            id: job.feedback.id,
+            bookingId: job.feedback.bookingId,
+            userId: job.feedback.userId,
+            rating: job.feedback.rating,
+            comment: job.feedback.comment,
+            createdAt: job.feedback.createdAt,
+            user: job.feedback.user,
+          }
+        : null,
+      summary: {
+        totalMessages: job.messages.length,
+        totalProposals: job.proposals.length,
+        totalComplaints: job.complaints.length,
+        hasFeedback: Boolean(job.feedback),
+      },
+    };
   }
 
   /**
