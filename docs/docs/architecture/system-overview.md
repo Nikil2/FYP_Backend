@@ -1,0 +1,170 @@
+# System Overview
+
+**Status:** Documentation - Reference
+
+## Project Name
+
+**Mehnati Marketplace** - میہناتی مارکیٹ پلیس
+
+## Vision
+
+A full-stack platform connecting customers with skilled workers (electricians, plumbers, carpenters, etc.) across Pakistan with bilingual support (English/Urdu).
+
+## Technology Stack
+
+### Frontend
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| Next.js | 16 | React framework with App Router |
+| React | 19 | UI library |
+| TypeScript | Latest | Type safety |
+| Tailwind CSS | 3.x | Styling |
+| shadcn/ui | Latest | UI components |
+
+### Backend
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| NestJS | Latest | Node.js framework |
+| Prisma | Latest | ORM |
+| PostgreSQL | 15+ | Database |
+| TypeScript | Latest | Type safety |
+
+### Infrastructure (Planned)
+| Technology | Purpose |
+|------------|---------|
+| Vercel | Frontend hosting |
+| Railway/Render | Backend hosting |
+| Cloudinary | Image storage |
+| Firebase | Push notifications |
+
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        CLIENT LAYER                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │   Customer  │  │   Worker    │  │    Admin    │        │
+│  │    App      │  │    App      │  │    Panel    │        │
+│  │  (Next.js)  │  │  (Next.js)  │  │  (Next.js)  │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ HTTPS
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       API LAYER                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              NestJS Backend (Port 4000)             │   │
+│  │                                                     │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐        │   │
+│  │  │   Auth   │  │  Users   │  │  Workers │        │   │
+│  │  │  Module  │  │  Module  │  │  Module  │        │   │
+│  │  └──────────┘  └──────────┘  └──────────┘        │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐        │   │
+│  │  │ Bookings │  │ Messages │  │ Complaints│        │   │
+│  │  │  Module  │  │  Module  │  │  Module  │        │   │
+│  │  └──────────┘  └──────────┘  └──────────┘        │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐        │   │
+│  │  │Payments  │  │Notifications│ │  Admin   │        │   │
+│  │  │  Module  │  │   Module  │  │  Module  │        │   │
+│  │  └──────────┘  └──────────┘  └──────────┘        │   │
+│  │                                                     │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            │ Prisma
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      DATA LAYER                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────────┐         ┌─────────────────┐          │
+│  │   PostgreSQL    │         │   Cloudinary    │          │
+│  │    Database     │         │   (Files)       │          │
+│  │                 │         │                 │          │
+│  │  - Users        │         │  - Profile Pics │          │
+│  │  - Workers      │         │  - CNIC Images  │          │
+│  │  - Bookings     │         │  - Portfolio    │          │
+│  │  - Messages     │         │  - Evidence     │          │
+│  │  - Payments     │         │                 │          │
+│  └─────────────────┘         └─────────────────┘          │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Core Entities
+
+```
+┌──────────────┐       ┌──────────────┐
+│    User      │──────▶│ WorkerProfile│
+│  (Auth)      │       │  (Details)   │
+└──────────────┘       └──────────────┘
+       │                       │
+       │                       │
+       ▼                       ▼
+┌──────────────┐       ┌──────────────┐
+│   Booking    │◀─────▶│   Service    │
+│  (Job)       │       │  (Category)  │
+└──────────────┘       └──────────────┘
+       │
+       │
+       ▼
+┌──────────────┐
+│  PriceProposal│
+│ (Negotiation)│
+└──────────────┘
+```
+
+## User Roles
+
+| Role | Description | Access |
+|------|-------------|--------|
+| CUSTOMER | Books services | Browse, book, rate, complain |
+| WORKER | Provides services | Accept jobs, negotiate, earn |
+| ADMIN | Platform management | All features + moderation |
+
+## Key Workflows
+
+### 1. Booking Flow
+```
+Customer browses services → Selects worker → Enters job details
+→ Worker receives request → Price negotiation → Booking accepted
+→ Job completed → Payment → Review
+```
+
+### 2. Worker Verification
+```
+Worker applies → Uploads CNIC + Selfie → Admin reviews
+→ Approved/Rejected → Worker can accept jobs
+```
+
+### 3. Dispute Resolution
+```
+Issue arises → Complaint filed → Admin assigned
+→ Evidence reviewed → Resolution → Action taken
+```
+
+## Security Principles
+
+- JWT-based authentication
+- Role-based access control (RBAC)
+- Input validation on all endpoints
+- CORS configured for frontend domain
+- Password hashing (bcrypt)
+- SQL injection prevention (Prisma)
+- Rate limiting on sensitive endpoints
+
+## Scalability Considerations
+
+- Stateless backend (horizontal scaling)
+- Database connection pooling
+- CDN for static assets
+- Caching layer (Redis) - future
+- WebSocket for real-time features - future
+- Message queue for async tasks - future
