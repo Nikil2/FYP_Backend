@@ -44,6 +44,15 @@ export class WorkersController {
    * Get worker by ID
    * GET /workers/:id
    */
+  @Get('user/:userId')
+  async getWorkerByUserId(@Param('userId') userId: string): Promise<WorkerResponseDto> {
+    return this.workersService.getWorkerByUserId(userId);
+  }
+
+  /**
+   * Get worker by ID
+   * GET /workers/:id
+   */
   @Get(':id')
   async getWorkerById(@Param('id') workerId: string): Promise<WorkerResponseDto> {
     return this.workersService.getWorkerById(workerId);
