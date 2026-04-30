@@ -1,19 +1,30 @@
 import { Injectable, ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UserRole } from '@prisma/client';
 
+export interface JwtPayload {
+  sub: string;
+  phoneNumber: string;
+  role: UserRole;
+}
+
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+  ) {}
 
   /**
    * Register a new user
+   * Returns user data with JWT token
    */
-  async register(createUserDto: CreateUserDto): Promise<UserResponseDto> {
+  async register(createUserDto: CreateUserDto): Promise<{ user: UserResponseDto; token: string }> {
     const { phoneNumber, password, fullName, profilePicUrl, fcmToken, role } = createUserDto;
 
     // Check if user already exists
@@ -40,13 +51,20 @@ export class UsersService {
       },
     });
 
-    return this.mapToResponseDto(user);
+    // Generate JWT token
+    const token = await this.generateToken(user);
+
+    return {
+      user: this.mapToResponseDto(user),
+      token,
+    };
   }
 
   /**
    * Login user with phone and password
+   * Returns user data with JWT token
    */
-  async login(loginDto: LoginDto): Promise<UserResponseDto> {
+  async login(loginDto: LoginDto): Promise<{ user: UserResponseDto; token: string }> {
     const { phoneNumber, password } = loginDto;
 
     // Find user by phone (include password for verification)
@@ -83,7 +101,13 @@ export class UsersService {
       throw new UnauthorizedException('User account is blocked');
     }
 
-    return this.mapToResponseDto(user);
+    // Generate JWT token
+    const token = await this.generateToken(user);
+
+    return {
+      user: this.mapToResponseDto(user),
+      token,
+    };
   }
   async getUserById(userId: string): Promise<UserResponseDto> {
     const user = await this.prisma.user.findUnique({
@@ -198,5 +222,18 @@ export class UsersService {
    */
   async verifyPassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
     return bcrypt.compare(plainPassword, hashedPassword);
+  }
+
+  /**
+   * Generate JWT token for user
+   */
+  private async generateToken(user: any): Promise<string> {
+    const payload = {
+      sub: user.id,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+    };
+
+    return this.jwtService.sign(payload);
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Param, Body, Query, HttpCode, UnauthorizedException } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Param, Body, Query, HttpCode } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
@@ -14,7 +14,7 @@ export class UsersController {
    */
   @Post('register')
   @HttpCode(201)
-  async register(@Body() createUserDto: CreateUserDto): Promise<UserResponseDto> {
+  async register(@Body() createUserDto: CreateUserDto): Promise<{ user: UserResponseDto; token: string }> {
     return this.usersService.register(createUserDto);
   }
 
@@ -24,7 +24,7 @@ export class UsersController {
    */
   @Post('login')
   @HttpCode(200)
-  async login(@Body() loginDto: LoginDto): Promise<UserResponseDto> {
+  async login(@Body() loginDto: LoginDto): Promise<{ user: UserResponseDto; token: string }> {
     return this.usersService.login(loginDto);
   }
 
