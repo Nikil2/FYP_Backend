@@ -1,0 +1,252 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BookingStatus, ProposalStatus, VerificationStatus } from '@prisma/client';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { CreateBookingDto, CreatePriceProposalDto } from './dto';
+
+@Injectable()
+export class BookingsService {
+  constructor(private prisma: PrismaService) {}
+
+  async createBooking(createBookingDto: CreateBookingDto) {
+    const { customerId, workerId, serviceId, description, jobAddress, jobLat, jobLng, scheduledAt, initialPrice } =
+      createBookingDto;
+
+    if (jobLat < -90 || jobLat > 90 || jobLng < -180 || jobLng > 180) {
+      throw new BadRequestException('Invalid coordinates provided');
+    }
+
+    const [customer, worker, service] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: customerId } }),
+      this.prisma.workerProfile.findUnique({ where: { id: workerId }, include: { user: true } }),
+      this.prisma.service.findUnique({ where: { id: serviceId } }),
+    ]);
+
+    if (!customer) throw new NotFoundException(`Customer with ID ${customerId} not found`);
+    if (!worker) throw new NotFoundException(`Worker with ID ${workerId} not found`);
+    if (!service) throw new NotFoundException(`Service with ID ${serviceId} not found`);
+
+    if (worker.verificationStatus !== VerificationStatus.APPROVED) {
+      throw new BadRequestException('Worker is not verified yet');
+    }
+
+    const booking = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.booking.create({
+        data: {
+          customerId,
+          workerId,
+          serviceId,
+          description,
+          jobAddress,
+          jobLat,
+          jobLng,
+          scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+          status: initialPrice && initialPrice > 0 ? BookingStatus.NEGOTIATION : BookingStatus.PENDING,
+          finalPrice: initialPrice ? initialPrice.toString() : null,
+        },
+        include: {
+          customer: true,
+          worker: { include: { user: true } },
+          service: true,
+        },
+      });
+
+      if (initialPrice && initialPrice > 0) {
+        await tx.priceProposal.create({
+          data: {
+            bookingId: created.id,
+            proposedBy: customerId,
+            amount: initialPrice.toString(),
+            status: ProposalStatus.PENDING,
+          },
+        });
+      }
+
+      return created;
+    });
+
+    return booking;
+  }
+
+  async getBookingById(bookingId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        customer: true,
+        worker: { include: { user: true, services: { include: { service: true } } } },
+        service: true,
+        proposals: { orderBy: { createdAt: 'desc' } },
+        messages: {
+          include: { sender: true },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+
+    return booking;
+  }
+
+  async getAllBookings(skip: number = 0, take: number = 20, status?: string) {
+    const where = status ? { status: status as BookingStatus } : {};
+
+    const [data, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,
+        include: {
+          customer: true,
+          worker: { include: { user: true } },
+          service: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    return { data, total };
+  }
+
+  async getCustomerBookings(customerId: string, skip: number = 0, take: number = 20, status?: string) {
+    const where = {
+      customerId,
+      ...(status ? { status: status as BookingStatus } : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,
+        include: {
+          customer: true,
+          worker: { include: { user: true } },
+          service: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    return { data, total };
+  }
+
+  async getWorkerBookings(workerId: string, skip: number = 0, take: number = 20, status?: string) {
+    const where = {
+      workerId,
+      ...(status ? { status: status as BookingStatus } : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,
+        include: {
+          customer: true,
+          worker: { include: { user: true } },
+          service: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    return { data, total };
+  }
+
+  async updateBookingStatus(bookingId: string, nextStatus: string) {
+    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+
+    const allowedStatuses = Object.values(BookingStatus);
+    if (!allowedStatuses.includes(nextStatus as BookingStatus)) {
+      throw new BadRequestException('Invalid booking status');
+    }
+
+    return this.prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: nextStatus as BookingStatus },
+      include: {
+        customer: true,
+        worker: { include: { user: true } },
+        service: true,
+      },
+    });
+  }
+
+  async cancelBooking(bookingId: string) {
+    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+
+    if (booking.status === BookingStatus.IN_PROGRESS || booking.status === BookingStatus.COMPLETED) {
+      throw new BadRequestException('Cannot cancel in-progress or completed booking');
+    }
+
+    return this.updateBookingStatus(bookingId, BookingStatus.CANCELLED);
+  }
+
+  async createPriceProposal(bookingId: string, dto: CreatePriceProposalDto) {
+    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+
+    await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        status: BookingStatus.NEGOTIATION,
+      },
+    });
+
+    return this.prisma.priceProposal.create({
+      data: {
+        bookingId,
+        proposedBy: dto.proposedBy,
+        amount: dto.amount.toString(),
+        status: ProposalStatus.PENDING,
+      },
+    });
+  }
+
+  async acceptPriceProposal(bookingId: string, proposalId: string) {
+    const [booking, proposal] = await Promise.all([
+      this.prisma.booking.findUnique({ where: { id: bookingId } }),
+      this.prisma.priceProposal.findUnique({ where: { id: proposalId } }),
+    ]);
+
+    if (!booking) throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    if (!proposal || proposal.bookingId !== bookingId) {
+      throw new NotFoundException(`Proposal with ID ${proposalId} not found for this booking`);
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.priceProposal.updateMany({
+        where: { bookingId, status: ProposalStatus.PENDING },
+        data: { status: ProposalStatus.REJECTED },
+      });
+
+      await tx.priceProposal.update({
+        where: { id: proposalId },
+        data: { status: ProposalStatus.ACCEPTED },
+      });
+
+      await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          finalPrice: proposal.amount,
+          status: BookingStatus.ACCEPTED,
+        },
+      });
+    });
+
+    return this.getBookingById(bookingId);
+  }
+}

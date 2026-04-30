@@ -59,6 +59,15 @@ export class WorkersController {
   }
 
   /**
+   * Get worker dashboard profile by user ID
+   * GET /workers/me/:userId
+   */
+  @Get('me/:userId')
+  async getMyWorkerProfile(@Param('userId') userId: string): Promise<WorkerResponseDto> {
+    return this.workersService.getWorkerByUserId(userId);
+  }
+
+  /**
    * Update worker profile
    * PUT /workers/:id
    */
@@ -68,6 +77,50 @@ export class WorkersController {
     @Body() updateData: Partial<CreateWorkerDto>,
   ): Promise<WorkerResponseDto> {
     return this.workersService.updateWorker(workerId, updateData);
+  }
+
+  /**
+   * Update worker online status
+   * PUT /workers/:id/online-status
+   */
+  @Put(':id/online-status')
+  async updateOnlineStatus(
+    @Param('id') workerId: string,
+    @Body() body: { isOnline: boolean },
+  ): Promise<WorkerResponseDto> {
+    return this.workersService.updateOnlineStatus(workerId, body.isOnline);
+  }
+
+  /**
+   * Get worker orders
+   * GET /workers/:id/orders?status=active|past
+   */
+  @Get(':id/orders')
+  async getWorkerOrders(
+    @Param('id') workerId: string,
+    @Query('status') status: string = 'active',
+    @Query('skip') skip: string = '0',
+    @Query('take') take: string = '20',
+  ) {
+    return this.workersService.getWorkerOrders(workerId, status, parseInt(skip), parseInt(take));
+  }
+
+  /**
+   * Get worker wallet summary
+   * GET /workers/:id/wallet/summary
+   */
+  @Get(':id/wallet/summary')
+  async getWalletSummary(@Param('id') workerId: string) {
+    return this.workersService.getWalletSummary(workerId);
+  }
+
+  /**
+   * Get worker wallet transactions
+   * GET /workers/:id/wallet/transactions
+   */
+  @Get(':id/wallet/transactions')
+  async getWalletTransactions(@Param('id') workerId: string) {
+    return this.workersService.getWalletTransactions(workerId);
   }
 
   /**
