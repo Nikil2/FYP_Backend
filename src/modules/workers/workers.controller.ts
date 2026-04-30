@@ -50,21 +50,21 @@ export class WorkersController {
   }
 
   /**
-   * Get worker by ID
-   * GET /workers/:id
-   */
-  @Get(':id')
-  async getWorkerById(@Param('id') workerId: string): Promise<WorkerResponseDto> {
-    return this.workersService.getWorkerById(workerId);
-  }
-
-  /**
    * Get worker dashboard profile by user ID
    * GET /workers/me/:userId
    */
   @Get('me/:userId')
   async getMyWorkerProfile(@Param('userId') userId: string): Promise<WorkerResponseDto> {
     return this.workersService.getWorkerByUserId(userId);
+  }
+
+  /**
+   * Get worker by ID
+   * GET /workers/:id
+   */
+  @Get(':id')
+  async getWorkerById(@Param('id') workerId: string): Promise<WorkerResponseDto> {
+    return this.workersService.getWorkerById(workerId);
   }
 
   /**
