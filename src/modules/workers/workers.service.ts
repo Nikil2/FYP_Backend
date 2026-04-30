@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateWorkerDto } from './dto/create-worker.dto';
 import { WorkerResponseDto } from './dto/worker-response.dto';
+import { UpdateOnlineStatusResponseDto } from './dto/update-online-status-response.dto';
 import { UserRole, VerificationStatus } from '@prisma/client';
 
 @Injectable()
@@ -294,6 +295,159 @@ export class WorkersService {
     });
 
     return workers.map((worker) => this.mapToResponseDto(worker.user, worker));
+  }
+
+  /**
+   * Update worker online status
+   */
+  async updateOnlineStatus(workerId: string, isOnline: boolean): Promise<UpdateOnlineStatusResponseDto> {
+    const worker = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+    });
+
+    if (!worker) {
+      throw new NotFoundException(`Worker with ID ${workerId} not found`);
+    }
+
+    const updated = await this.prisma.workerProfile.update({
+      where: { id: workerId },
+      data: { isOnline },
+    });
+
+    return {
+      workerId: updated.id,
+      isOnline: updated.isOnline,
+      updatedAt: new Date(),
+    };
+  }
+
+  /**
+   * Get worker orders by status bucket (active/past)
+   */
+  async getWorkerOrders(
+    workerId: string,
+    status: string = 'active',
+    skip: number = 0,
+    take: number = 20,
+  ) {
+    const worker = await this.prisma.workerProfile.findUnique({ where: { id: workerId } });
+    if (!worker) {
+      throw new NotFoundException(`Worker with ID ${workerId} not found`);
+    }
+
+    const activeStatuses = ['PENDING', 'NEGOTIATION', 'ACCEPTED', 'IN_PROGRESS'];
+    const pastStatuses = ['COMPLETED', 'CANCELLED', 'DISPUTED'];
+    const statusList = status === 'past' ? pastStatuses : activeStatuses;
+
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        workerId,
+        status: { in: statusList as any },
+      },
+      include: {
+        customer: true,
+        service: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take,
+    });
+
+    return bookings.map((booking) => ({
+      id: booking.id,
+      serviceName: booking.service.name,
+      description: booking.description,
+      status: booking.status,
+      location: booking.jobAddress,
+      scheduledAt: booking.scheduledAt,
+      agreedPrice: booking.finalPrice ? Number(booking.finalPrice) : null,
+      customer: {
+        id: booking.customer.id,
+        fullName: booking.customer.fullName,
+        phoneNumber: booking.customer.phoneNumber,
+      },
+      createdAt: booking.createdAt,
+    }));
+  }
+
+  /**
+   * Wallet summary based on completed bookings
+   */
+  async getWalletSummary(workerId: string) {
+    const worker = await this.prisma.workerProfile.findUnique({ where: { id: workerId } });
+    if (!worker) {
+      throw new NotFoundException(`Worker with ID ${workerId} not found`);
+    }
+
+    const completed = await this.prisma.booking.findMany({
+      where: {
+        workerId,
+        status: 'COMPLETED',
+        finalPrice: { not: null },
+      },
+      select: {
+        finalPrice: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const totalEarnings = completed.reduce((sum, b) => sum + Number(b.finalPrice || 0), 0);
+    const pending = await this.prisma.booking.findMany({
+      where: {
+        workerId,
+        status: { in: ['ACCEPTED', 'IN_PROGRESS'] as any },
+        finalPrice: { not: null },
+      },
+      select: { finalPrice: true },
+    });
+    const pendingBalance = pending.reduce((sum, b) => sum + Number(b.finalPrice || 0), 0);
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const thisMonthEarnings = completed
+      .filter((b) => b.createdAt >= monthStart)
+      .reduce((sum, b) => sum + Number(b.finalPrice || 0), 0);
+
+    return {
+      workerId,
+      totalEarnings,
+      availableBalance: totalEarnings,
+      pendingBalance,
+      thisMonthEarnings,
+    };
+  }
+
+  /**
+   * Wallet transactions list derived from completed bookings
+   */
+  async getWalletTransactions(workerId: string) {
+    const worker = await this.prisma.workerProfile.findUnique({ where: { id: workerId } });
+    if (!worker) {
+      throw new NotFoundException(`Worker with ID ${workerId} not found`);
+    }
+
+    const completed = await this.prisma.booking.findMany({
+      where: {
+        workerId,
+        status: 'COMPLETED',
+        finalPrice: { not: null },
+      },
+      include: {
+        service: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return completed.map((booking) => ({
+      id: booking.id,
+      type: 'credit',
+      amount: Number(booking.finalPrice || 0),
+      status: 'completed',
+      description: `Payment received for ${booking.service.name}`,
+      date: booking.createdAt,
+      orderId: booking.id,
+    }));
   }
 
   /**
