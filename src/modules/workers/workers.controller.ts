@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Put, Delete, Body, Param, Query, HttpCode, HttpStatus } from '@nestjs/common';
 import { WorkersService } from './workers.service';
-import { CreateWorkerDto, WorkerResponseDto } from './dto';
+import { CreateWorkerDto, WorkerResponseDto, UpdateOnlineStatusResponseDto } from './dto';
 
 @Controller('workers')
 export class WorkersController {
@@ -87,7 +87,7 @@ export class WorkersController {
   async updateOnlineStatus(
     @Param('id') workerId: string,
     @Body() body: { isOnline: boolean },
-  ): Promise<WorkerResponseDto> {
+  ): Promise<UpdateOnlineStatusResponseDto> {
     return this.workersService.updateOnlineStatus(workerId, body.isOnline);
   }
 

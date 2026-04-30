@@ -8,6 +8,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateWorkerDto } from './dto/create-worker.dto';
 import { WorkerResponseDto } from './dto/worker-response.dto';
+import { UpdateOnlineStatusResponseDto } from './dto/update-online-status-response.dto';
 import { UserRole, VerificationStatus } from '@prisma/client';
 
 @Injectable()
@@ -299,14 +300,9 @@ export class WorkersService {
   /**
    * Update worker online status
    */
-  async updateOnlineStatus(workerId: string, isOnline: boolean): Promise<WorkerResponseDto> {
+  async updateOnlineStatus(workerId: string, isOnline: boolean): Promise<UpdateOnlineStatusResponseDto> {
     const worker = await this.prisma.workerProfile.findUnique({
       where: { id: workerId },
-      include: {
-        user: true,
-        services: { include: { service: true } },
-        portfolio: true,
-      },
     });
 
     if (!worker) {
@@ -316,14 +312,13 @@ export class WorkersService {
     const updated = await this.prisma.workerProfile.update({
       where: { id: workerId },
       data: { isOnline },
-      include: {
-        user: true,
-        services: { include: { service: true } },
-        portfolio: true,
-      },
     });
 
-    return this.mapToResponseDto(updated.user, updated);
+    return {
+      workerId: updated.id,
+      isOnline: updated.isOnline,
+      updatedAt: new Date(),
+    };
   }
 
   /**
