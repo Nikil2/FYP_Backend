@@ -286,9 +286,18 @@ export class AdminController {
   @HttpCode(HttpStatus.CREATED)
   async createService(
     @Body('name') name: string,
+    @Body('categoryId') categoryId: string,
+    @Body('categoryName') categoryName: string,
     @Body('iconUrl') iconUrl?: string,
+    @Body('categoryIcon') categoryIcon?: string,
   ) {
-    const service = await this.adminService.createService(name, iconUrl);
+    const service = await this.adminService.createService(
+      name,
+      iconUrl,
+      categoryId,
+      categoryName,
+      categoryIcon,
+    );
     return {
       data: service,
       message: 'Service category created successfully',

@@ -9,6 +9,18 @@ export class UpdateServiceDto {
   @IsOptional()
   iconUrl?: string;
 
+  @IsString()
+  @IsOptional()
+  categoryId?: string;
+
+  @IsString()
+  @IsOptional()
+  categoryName?: string;
+
+  @IsString()
+  @IsOptional()
+  categoryIcon?: string;
+
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;

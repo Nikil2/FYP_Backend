@@ -8,4 +8,16 @@ export class CreateServiceDto {
   @IsOptional()
   @IsUrl()
   iconUrl?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  categoryId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  categoryName: string;
+
+  @IsOptional()
+  @IsString()
+  categoryIcon?: string;
 }

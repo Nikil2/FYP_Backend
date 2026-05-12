@@ -11,11 +11,16 @@ export class ServicesService {
    * Create a new service
    */
   async createService(createServiceDto: CreateServiceDto): Promise<ServiceResponseDto> {
-    const { name, iconUrl } = createServiceDto;
+    const { name, iconUrl, categoryId, categoryName, categoryIcon } = createServiceDto;
 
     // Check if service already exists
     const existingService = await this.prisma.service.findUnique({
-      where: { name },
+      where: {
+        categoryId_name: {
+          categoryId,
+          name,
+        },
+      },
     });
 
     if (existingService) {
@@ -26,6 +31,9 @@ export class ServicesService {
       data: {
         name,
         iconUrl: iconUrl || null,
+        categoryId,
+        categoryName,
+        categoryIcon: categoryIcon || null,
         isActive: true,
       },
     });
@@ -135,6 +143,9 @@ export class ServicesService {
       id: service.id,
       name: service.name,
       iconUrl: service.iconUrl,
+      categoryId: service.categoryId,
+      categoryName: service.categoryName,
+      categoryIcon: service.categoryIcon,
       isActive: service.isActive,
     };
   }

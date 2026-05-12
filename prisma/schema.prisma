@@ -70,12 +70,18 @@ model AdminProfile {
 }
 
 model Service {
-  id       Int             @id @default(autoincrement())
-  name     String          @unique
-  iconUrl  String?
-  isActive Boolean         @default(true)
-  bookings Booking[]
-  workers  WorkerService[]
+  id           Int             @id @default(autoincrement())
+  name         String          @unique
+  iconUrl      String?
+  isActive     Boolean         @default(true)
+  categoryId   String
+  categoryName String
+  categoryIcon String?
+  bookings     Booking[]
+  workers      WorkerService[]
+
+  @@unique([categoryId, name])
+  @@index([categoryId])
 }
 
 model WorkerService {
