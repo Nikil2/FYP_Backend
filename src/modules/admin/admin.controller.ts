@@ -39,13 +39,13 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() loginDto: AdminLoginDto,
-  ): Promise<{ data: AdminResponseDto; message: string }> {
-    const admin = await this.adminService.validateAdminCredentials(
+  ): Promise<{ data: { admin: AdminResponseDto; accessToken: string }; message: string }> {
+    const result = await this.adminService.validateAdminCredentials(
       loginDto.username,
       loginDto.password,
     );
     return {
-      data: admin,
+      data: result,
       message: 'Admin login successful',
     };
   }

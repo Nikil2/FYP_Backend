@@ -4,6 +4,7 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import {
   AdminResponseDto,
@@ -15,7 +16,10 @@ import { UpdateServiceDto } from './dto/update-service.dto';
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+  ) {}
 
   /**
    * Validate admin credentials and return admin profile
@@ -23,7 +27,7 @@ export class AdminService {
   async validateAdminCredentials(
     username: string,
     password: string,
-  ): Promise<AdminResponseDto> {
+  ): Promise<{ admin: AdminResponseDto; accessToken: string }> {
     // Find user by phone number (username is stored as phoneNumber)
     const user = await this.prisma.user.findFirst({
       where: {
@@ -46,7 +50,18 @@ export class AdminService {
       throw new UnauthorizedException('Invalid admin credentials');
     }
 
-    return this.mapAdminResponse(user);
+    // Generate JWT token with ADMIN role
+    const payload = {
+      sub: user.id,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+    };
+    const accessToken = this.jwtService.sign(payload);
+
+    return {
+      admin: this.mapAdminResponse(user),
+      accessToken,
+    };
   }
 
   /**
