@@ -44,8 +44,8 @@ export class ComplaintsService {
     }
 
     // Only allow complaints on valid statuses
-    const allowedStatuses = [BookingStatus.ACCEPTED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED];
-    if (!allowedStatuses.includes(booking.status)) {
+    const allowedStatuses: BookingStatus[] = [BookingStatus.ACCEPTED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED];
+    if (!allowedStatuses.includes(booking.status as BookingStatus)) {
       throw new BadRequestException(
         `Complaints can only be filed for bookings with status: ${allowedStatuses.join(', ')}`,
       );
