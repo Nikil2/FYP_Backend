@@ -1007,6 +1007,9 @@ export class AdminService {
       id: s.id,
       name: s.name,
       iconUrl: s.iconUrl,
+      categoryId: s.categoryId,
+      categoryName: s.categoryName,
+      categoryIcon: s.categoryIcon,
       isActive: s.isActive,
     }));
   }
@@ -1014,9 +1017,24 @@ export class AdminService {
   /**
    * Create a new service category
    */
-  async createService(name: string, iconUrl?: string) {
+  async createService(
+    name: string,
+    iconUrl: string | undefined,
+    categoryId: string,
+    categoryName: string,
+    categoryIcon?: string,
+  ) {
+    if (!categoryId || !categoryName) {
+      throw new BadRequestException('categoryId and categoryName are required');
+    }
+
     const existing = await this.prisma.service.findUnique({
-      where: { name },
+      where: {
+        categoryId_name: {
+          categoryId,
+          name,
+        },
+      },
     });
 
     if (existing) {
@@ -1027,6 +1045,9 @@ export class AdminService {
       data: {
         name,
         iconUrl,
+        categoryId,
+        categoryName,
+        categoryIcon: categoryIcon || null,
         isActive: true,
       },
     });
@@ -1035,6 +1056,9 @@ export class AdminService {
       id: service.id,
       name: service.name,
       iconUrl: service.iconUrl,
+      categoryId: service.categoryId,
+      categoryName: service.categoryName,
+      categoryIcon: service.categoryIcon,
       isActive: service.isActive,
     };
   }
@@ -1052,6 +1076,9 @@ export class AdminService {
       id: service.id,
       name: service.name,
       iconUrl: service.iconUrl,
+      categoryId: service.categoryId,
+      categoryName: service.categoryName,
+      categoryIcon: service.categoryIcon,
       isActive: service.isActive,
     };
   }
@@ -1068,6 +1095,9 @@ export class AdminService {
     return {
       id: service.id,
       name: service.name,
+      categoryId: service.categoryId,
+      categoryName: service.categoryName,
+      categoryIcon: service.categoryIcon,
       isActive: service.isActive,
     };
   }
@@ -1084,6 +1114,9 @@ export class AdminService {
     return {
       id: service.id,
       name: service.name,
+      categoryId: service.categoryId,
+      categoryName: service.categoryName,
+      categoryIcon: service.categoryIcon,
       isActive: service.isActive,
     };
   }
