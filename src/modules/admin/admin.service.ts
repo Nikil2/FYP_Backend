@@ -326,24 +326,55 @@ export class AdminService {
       this.prisma.workerProfile.count({ where }),
     ]);
 
+    const workerIds = workers.map((w: any) => w.id);
+    const userIds = workers.map((w: any) => w.userId);
+    const portfolioLookupIds = [...new Set([...workerIds, ...userIds])];
+
+    const portfolioRows = portfolioLookupIds.length
+      ? await this.prisma.workerPortfolio.findMany({
+          where: { workerId: { in: portfolioLookupIds } },
+          select: { id: true, workerId: true, imageUrl: true, description: true },
+        })
+      : [];
+
+    const portfolioByWorkerId = portfolioRows.reduce(
+      (acc, row) => {
+        if (!acc[row.workerId]) acc[row.workerId] = [];
+        acc[row.workerId].push({ id: row.id, imageUrl: row.imageUrl, description: row.description });
+        return acc;
+      },
+      {} as Record<string, Array<{ id: string; imageUrl: string; description: string | null }>>,
+    );
+
     return {
-      data: workers.map((worker: any) => ({
-        id: worker.id,
-        userId: worker.userId,
-        cnicNumber: worker.cnicNumber,
-        cnicFrontUrl: worker.cnicFrontUrl,
-        cnicBackUrl: worker.cnicBackUrl,
-        bio: worker.bio,
-        experienceYears: worker.experienceYears,
-        visitingCharges: Number(worker.visitingCharges),
-        homeAddress: worker.homeAddress,
-        verificationStatus: worker.verificationStatus,
-        averageRating: Number(worker.averageRating),
-        totalJobsCompleted: worker.totalJobsCompleted,
-        isOnline: worker.isOnline,
-        user: worker.user,
-        services: worker.services.map((s: any) => s.service),
-      })),
+      data: workers.map((worker: any) => {
+        const byWorkerId = portfolioByWorkerId[worker.id] || [];
+        const byUserId = portfolioByWorkerId[worker.userId] || [];
+        const merged = [...byWorkerId, ...byUserId];
+        const portfolio = merged.filter(
+          (item, index, arr) => arr.findIndex((e) => e.id === item.id) === index,
+        );
+
+        return {
+          id: worker.id,
+          userId: worker.userId,
+          cnicNumber: worker.cnicNumber,
+          cnicFrontUrl: worker.cnicFrontUrl,
+          cnicBackUrl: worker.cnicBackUrl,
+          selfieImageUrl: worker.selfieImageUrl,
+          bio: worker.bio,
+          experienceYears: worker.experienceYears,
+          visitingCharges: Number(worker.visitingCharges),
+          homeAddress: worker.homeAddress,
+          verificationStatus: worker.verificationStatus,
+          averageRating: Number(worker.averageRating),
+          totalJobsCompleted: worker.totalJobsCompleted,
+          isOnline: worker.isOnline,
+          user: worker.user,
+          services: worker.services.map((s: any) => s.service),
+          portfolio,
+        };
+      }),
       meta: {
         total,
         page,
