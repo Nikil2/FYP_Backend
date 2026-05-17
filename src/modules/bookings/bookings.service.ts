@@ -134,6 +134,18 @@ export class BookingsService {
     return { data, total };
   }
 
+  async getWorkerBookingsByUserId(userId: string, skip: number = 0, take: number = 20, status?: string) {
+    const workerProfile = await this.prisma.workerProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!workerProfile) {
+      throw new NotFoundException(`Worker profile not found for user ${userId}`);
+    }
+
+    return this.getWorkerBookings(workerProfile.id, skip, take, status);
+  }
+
   async getWorkerBookings(workerId: string, skip: number = 0, take: number = 20, status?: string) {
     const where = {
       workerId,
