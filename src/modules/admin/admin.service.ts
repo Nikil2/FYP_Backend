@@ -5,7 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { AdminResponseDto, DashboardResponseDto, WorkerQualityDto, DashboardActivityDto } from './dto';
+import {
+  AdminResponseDto,
+  DashboardResponseDto,
+  WorkerQualityDto,
+  DashboardActivityDto,
+} from './dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 
 @Injectable()
@@ -15,7 +20,10 @@ export class AdminService {
   /**
    * Validate admin credentials and return admin profile
    */
-  async validateAdminCredentials(username: string, password: string): Promise<AdminResponseDto> {
+  async validateAdminCredentials(
+    username: string,
+    password: string,
+  ): Promise<AdminResponseDto> {
     // Find user by phone number (username is stored as phoneNumber)
     const user = await this.prisma.user.findFirst({
       where: {
@@ -63,8 +71,12 @@ export class AdminService {
     ] = await Promise.all([
       this.prisma.user.count({ where: { role: { not: 'ADMIN' } } }),
       this.prisma.workerProfile.count(),
-      this.prisma.workerProfile.count({ where: { verificationStatus: 'APPROVED' } }),
-      this.prisma.workerProfile.count({ where: { verificationStatus: 'PENDING' } }),
+      this.prisma.workerProfile.count({
+        where: { verificationStatus: 'APPROVED' },
+      }),
+      this.prisma.workerProfile.count({
+        where: { verificationStatus: 'PENDING' },
+      }),
       this.prisma.workerProfile.count({ where: { user: { isBlocked: true } } }),
       this.prisma.workerProfile.count({ where: { isOnline: true } }),
       this.prisma.booking.count(),
@@ -380,7 +392,10 @@ export class AdminService {
         });
         return acc;
       },
-      {} as Record<string, Array<{ id: string; imageUrl: string; description: string | null }>>,
+      {} as Record<
+        string,
+        Array<{ id: string; imageUrl: string; description: string | null }>
+      >,
     );
 
     return workers.map((worker: any) => ({
@@ -408,7 +423,8 @@ export class AdminService {
 
         // Deduplicate in case both keys point to same rows.
         return merged.filter(
-          (item, index, arr) => arr.findIndex((entry) => entry.id === item.id) === index,
+          (item, index, arr) =>
+            arr.findIndex((entry) => entry.id === item.id) === index,
         );
       })(),
       submittedAt: worker.user?.createdAt || new Date(),
@@ -418,7 +434,10 @@ export class AdminService {
   /**
    * Approve worker verification
    */
-  async approveWorkerVerification(workerId: string, reviewedBy: string): Promise<any> {
+  async approveWorkerVerification(
+    workerId: string,
+    reviewedBy: string,
+  ): Promise<any> {
     const worker = await this.prisma.workerProfile.update({
       where: { id: workerId },
       data: {
@@ -648,7 +667,11 @@ export class AdminService {
         { customer: { fullName: { contains: search, mode: 'insensitive' } } },
         { customer: { phoneNumber: { contains: search } } },
         { worker: { id: { contains: search, mode: 'insensitive' } } },
-        { worker: { user: { fullName: { contains: search, mode: 'insensitive' } } } },
+        {
+          worker: {
+            user: { fullName: { contains: search, mode: 'insensitive' } },
+          },
+        },
         { worker: { user: { phoneNumber: { contains: search } } } },
         { service: { name: { contains: search, mode: 'insensitive' } } },
       ];
@@ -1129,11 +1152,7 @@ export class AdminService {
     currentMonth.setDate(1);
     currentMonth.setHours(0, 0, 0, 0);
 
-    const [
-      grossRevenue,
-      refunds,
-      monthlyBookings,
-    ] = await Promise.all([
+    const [grossRevenue, refunds, monthlyBookings] = await Promise.all([
       this.prisma.booking.aggregate({
         _sum: { finalPrice: true },
         where: {
@@ -1210,8 +1229,10 @@ export class AdminService {
       }),
     ]);
 
-    const completionRate = totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 0;
-    const disputeRate = totalBookings > 0 ? (disputedBookings / totalBookings) * 100 : 0;
+    const completionRate =
+      totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 0;
+    const disputeRate =
+      totalBookings > 0 ? (disputedBookings / totalBookings) * 100 : 0;
 
     // Get service names for demand
     const serviceIds = serviceDemand.map((s) => s.serviceId);
@@ -1221,7 +1242,8 @@ export class AdminService {
 
     const serviceDemandWithNames = serviceDemand.map((s) => ({
       serviceId: s.serviceId,
-      serviceName: services.find((srv) => srv.id === s.serviceId)?.name || 'Unknown',
+      serviceName:
+        services.find((srv) => srv.id === s.serviceId)?.name || 'Unknown',
       count: s._count,
     }));
 
@@ -1290,7 +1312,9 @@ export class AdminService {
       })),
     ];
 
-    return activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 10);
+    return activities
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 10);
   }
 
   private async getWorkerQualitySnapshot(): Promise<WorkerQualityDto[]> {

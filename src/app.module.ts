@@ -27,7 +27,7 @@ import { ScheduleModule } from './modules/schedule/schedule.module';
     // Infrastructure
     PrismaModule,
     AuthModule,
-    RealtimeModule,    // Socket.IO — global, used by Messages & Notifications
+    RealtimeModule, // Socket.IO — global, used by Messages & Notifications
     // Core modules
     UsersModule,
     WorkersModule,

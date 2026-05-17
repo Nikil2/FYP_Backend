@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { ScheduleService } from './schedule.service';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -16,14 +26,20 @@ export class ScheduleController {
   /** POST /workers/:workerId/schedule — Set single day (auth required) */
   @Post()
   @UseGuards(JwtAuthGuard)
-  async setDaySchedule(@Param('workerId') workerId: string, @Body() dto: CreateScheduleDto) {
+  async setDaySchedule(
+    @Param('workerId') workerId: string,
+    @Body() dto: CreateScheduleDto,
+  ) {
     return this.scheduleService.setDaySchedule(workerId, dto);
   }
 
   /** PUT /workers/:workerId/schedule — Replace full week schedule (auth required) */
   @Put()
   @UseGuards(JwtAuthGuard)
-  async setFullSchedule(@Param('workerId') workerId: string, @Body() entries: CreateScheduleDto[]) {
+  async setFullSchedule(
+    @Param('workerId') workerId: string,
+    @Body() entries: CreateScheduleDto[],
+  ) {
     return this.scheduleService.setFullSchedule(workerId, entries);
   }
 

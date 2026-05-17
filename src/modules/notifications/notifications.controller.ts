@@ -1,4 +1,14 @@
-import { Controller, Get, Put, Delete, Post, Param, Body, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Put,
+  Delete,
+  Post,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -18,7 +28,11 @@ export class NotificationsController {
     @Query('skip') skip: string = '0',
     @Query('take') take: string = '20',
   ) {
-    return this.notificationsService.getUserNotifications(userId, parseInt(skip), parseInt(take));
+    return this.notificationsService.getUserNotifications(
+      userId,
+      parseInt(skip),
+      parseInt(take),
+    );
   }
 
   /**

@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Param, Body, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -32,7 +40,12 @@ export class MessagesController {
     @Query('skip') skip: string = '0',
     @Query('take') take: string = '50',
   ) {
-    return this.messagesService.getBookingMessages(userId, bookingId, parseInt(skip), parseInt(take));
+    return this.messagesService.getBookingMessages(
+      userId,
+      bookingId,
+      parseInt(skip),
+      parseInt(take),
+    );
   }
 
   /**

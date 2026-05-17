@@ -33,7 +33,9 @@ import { PrismaService } from '../../../prisma/prisma.service';
   namespace: '/',
 })
 @Injectable()
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -57,16 +59,19 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     try {
       const token =
         client.handshake.auth?.token ||
-        client.handshake.query?.token as string;
+        (client.handshake.query?.token as string);
 
       if (!token) {
-        this.logger.warn(`Client ${client.id} connected without token — disconnecting`);
+        this.logger.warn(
+          `Client ${client.id} connected without token — disconnecting`,
+        );
         client.disconnect();
         return;
       }
 
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        secret:
+          process.env.JWT_SECRET || 'your-secret-key-change-in-production',
       });
 
       const userId = payload.sub;
@@ -98,7 +103,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       client.data.role = payload.role;
       client.data.fullName = user.fullName;
 
-      this.logger.log(`✅ User ${user.fullName} (${userId}) connected — socket ${client.id}`);
+      this.logger.log(
+        `✅ User ${user.fullName} (${userId}) connected — socket ${client.id}`,
+      );
     } catch (error) {
       this.logger.warn(`Client ${client.id} — auth failed: ${error.message}`);
       client.disconnect();
@@ -230,7 +237,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
    * Emit booking status update to all participants.
    */
   emitBookingStatusUpdate(bookingId: string, booking: any) {
-    this.server.to(`booking:${bookingId}`).emit('booking_status_updated', booking);
+    this.server
+      .to(`booking:${bookingId}`)
+      .emit('booking_status_updated', booking);
   }
 
   /**
@@ -244,7 +253,9 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
    * Check if a user is currently online (has connected sockets).
    */
   isUserOnline(userId: string): boolean {
-    return this.userSockets.has(userId) && this.userSockets.get(userId).size > 0;
+    return (
+      this.userSockets.has(userId) && this.userSockets.get(userId).size > 0
+    );
   }
 
   /**

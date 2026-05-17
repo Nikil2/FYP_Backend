@@ -13,7 +13,12 @@ export class NotificationsService {
    * Create a notification and push it via Socket.IO in real-time.
    * This is the central method called by other services to notify users.
    */
-  async createNotification(userId: string, title: string, body: string, type?: string) {
+  async createNotification(
+    userId: string,
+    title: string,
+    body: string,
+    type?: string,
+  ) {
     const notification = await this.prisma.notification.create({
       data: {
         userId,
@@ -34,7 +39,11 @@ export class NotificationsService {
   /**
    * Get user's notifications (paginated, newest first).
    */
-  async getUserNotifications(userId: string, skip: number = 0, take: number = 20) {
+  async getUserNotifications(
+    userId: string,
+    skip: number = 0,
+    take: number = 20,
+  ) {
     const [notifications, total] = await Promise.all([
       this.prisma.notification.findMany({
         where: { userId },

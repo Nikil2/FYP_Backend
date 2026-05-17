@@ -36,7 +36,8 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_SECRET || 'your-secret-key-change-in-production',
+        secret:
+          process.env.JWT_SECRET || 'your-secret-key-change-in-production',
       });
 
       // Verify user still exists and is not blocked

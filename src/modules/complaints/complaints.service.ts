@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
-import { CreateComplaintDto, ResolveComplaintDto } from './dto/create-complaint.dto';
+import {
+  CreateComplaintDto,
+  ResolveComplaintDto,
+} from './dto/create-complaint.dto';
 import { BookingStatus } from '@prisma/client';
 
 @Injectable()
@@ -44,7 +47,11 @@ export class ComplaintsService {
     }
 
     // Only allow complaints on valid statuses
-    const allowedStatuses: BookingStatus[] = [BookingStatus.ACCEPTED, BookingStatus.IN_PROGRESS, BookingStatus.COMPLETED];
+    const allowedStatuses: BookingStatus[] = [
+      BookingStatus.ACCEPTED,
+      BookingStatus.IN_PROGRESS,
+      BookingStatus.COMPLETED,
+    ];
     if (!allowedStatuses.includes(booking.status as BookingStatus)) {
       throw new BadRequestException(
         `Complaints can only be filed for bookings with status: ${allowedStatuses.join(', ')}`,
@@ -81,7 +88,9 @@ export class ComplaintsService {
     });
 
     // Notify the other party and admins in real-time
-    const otherPartyUserId = isCustomer ? booking.worker.userId : booking.customerId;
+    const otherPartyUserId = isCustomer
+      ? booking.worker.userId
+      : booking.customerId;
     this.realtimeGateway.emitNotification(otherPartyUserId, {
       type: 'COMPLAINT_FILED',
       title: 'Complaint Filed',
@@ -126,10 +135,14 @@ export class ComplaintsService {
       include: {
         booking: {
           include: {
-            customer: { select: { id: true, fullName: true, phoneNumber: true } },
+            customer: {
+              select: { id: true, fullName: true, phoneNumber: true },
+            },
             worker: {
               include: {
-                user: { select: { id: true, fullName: true, phoneNumber: true } },
+                user: {
+                  select: { id: true, fullName: true, phoneNumber: true },
+                },
               },
             },
             service: true,
@@ -153,7 +166,11 @@ export class ComplaintsService {
   /**
    * Get all complaints (admin) with pagination and status filter.
    */
-  async getAllComplaints(skip: number = 0, take: number = 20, isResolved?: boolean) {
+  async getAllComplaints(
+    skip: number = 0,
+    take: number = 20,
+    isResolved?: boolean,
+  ) {
     const where = isResolved !== undefined ? { isResolved } : {};
 
     const [complaints, total] = await Promise.all([
@@ -190,7 +207,11 @@ export class ComplaintsService {
   /**
    * Resolve a complaint (admin only).
    */
-  async resolveComplaint(adminUserId: string, complaintId: string, dto: ResolveComplaintDto) {
+  async resolveComplaint(
+    adminUserId: string,
+    complaintId: string,
+    dto: ResolveComplaintDto,
+  ) {
     const complaint = await this.prisma.complaint.findUnique({
       where: { id: complaintId },
       include: {
@@ -243,7 +264,7 @@ export class ComplaintsService {
     this.realtimeGateway.emitNotification(resolved.booking.customerId, {
       type: 'COMPLAINT_RESOLVED',
       title: 'Complaint Resolved',
-      body: 'Your complaint has been resolved by the admin',
+      body: dto.resolution,
       data: { complaintId, bookingId: resolved.bookingId },
     });
 

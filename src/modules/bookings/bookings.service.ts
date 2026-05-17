@@ -1,5 +1,13 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { BookingStatus, ProposalStatus, VerificationStatus } from '@prisma/client';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  BookingStatus,
+  ProposalStatus,
+  VerificationStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateBookingDto, CreatePriceProposalDto } from './dto';
 
@@ -8,8 +16,17 @@ export class BookingsService {
   constructor(private prisma: PrismaService) {}
 
   async createBooking(createBookingDto: CreateBookingDto) {
-    const { customerId, workerId, serviceId, description, jobAddress, jobLat, jobLng, scheduledAt, initialPrice } =
-      createBookingDto;
+    const {
+      customerId,
+      workerId,
+      serviceId,
+      description,
+      jobAddress,
+      jobLat,
+      jobLng,
+      scheduledAt,
+      initialPrice,
+    } = createBookingDto;
 
     if (jobLat < -90 || jobLat > 90 || jobLng < -180 || jobLng > 180) {
       throw new BadRequestException('Invalid coordinates provided');
@@ -17,13 +34,19 @@ export class BookingsService {
 
     const [customer, worker, service] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: customerId } }),
-      this.prisma.workerProfile.findUnique({ where: { id: workerId }, include: { user: true } }),
+      this.prisma.workerProfile.findUnique({
+        where: { id: workerId },
+        include: { user: true },
+      }),
       this.prisma.service.findUnique({ where: { id: serviceId } }),
     ]);
 
-    if (!customer) throw new NotFoundException(`Customer with ID ${customerId} not found`);
-    if (!worker) throw new NotFoundException(`Worker with ID ${workerId} not found`);
-    if (!service) throw new NotFoundException(`Service with ID ${serviceId} not found`);
+    if (!customer)
+      throw new NotFoundException(`Customer with ID ${customerId} not found`);
+    if (!worker)
+      throw new NotFoundException(`Worker with ID ${workerId} not found`);
+    if (!service)
+      throw new NotFoundException(`Service with ID ${serviceId} not found`);
 
     if (worker.verificationStatus !== VerificationStatus.APPROVED) {
       throw new BadRequestException('Worker is not verified yet');
@@ -40,7 +63,10 @@ export class BookingsService {
           jobLat,
           jobLng,
           scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
-          status: initialPrice && initialPrice > 0 ? BookingStatus.NEGOTIATION : BookingStatus.PENDING,
+          status:
+            initialPrice && initialPrice > 0
+              ? BookingStatus.NEGOTIATION
+              : BookingStatus.PENDING,
           finalPrice: initialPrice ? initialPrice.toString() : null,
         },
         include: {
@@ -72,7 +98,9 @@ export class BookingsService {
       where: { id: bookingId },
       include: {
         customer: true,
-        worker: { include: { user: true, services: { include: { service: true } } } },
+        worker: {
+          include: { user: true, services: { include: { service: true } } },
+        },
         service: true,
         proposals: { orderBy: { createdAt: 'desc' } },
         messages: {
@@ -110,7 +138,12 @@ export class BookingsService {
     return { data, total };
   }
 
-  async getCustomerBookings(customerId: string, skip: number = 0, take: number = 20, status?: string) {
+  async getCustomerBookings(
+    customerId: string,
+    skip: number = 0,
+    take: number = 20,
+    status?: string,
+  ) {
     const where = {
       customerId,
       ...(status ? { status: status as BookingStatus } : {}),
@@ -134,19 +167,31 @@ export class BookingsService {
     return { data, total };
   }
 
-  async getWorkerBookingsByUserId(userId: string, skip: number = 0, take: number = 20, status?: string) {
+  async getWorkerBookingsByUserId(
+    userId: string,
+    skip: number = 0,
+    take: number = 20,
+    status?: string,
+  ) {
     const workerProfile = await this.prisma.workerProfile.findUnique({
       where: { userId },
     });
 
     if (!workerProfile) {
-      throw new NotFoundException(`Worker profile not found for user ${userId}`);
+      throw new NotFoundException(
+        `Worker profile not found for user ${userId}`,
+      );
     }
 
     return this.getWorkerBookings(workerProfile.id, skip, take, status);
   }
 
-  async getWorkerBookings(workerId: string, skip: number = 0, take: number = 20, status?: string) {
+  async getWorkerBookings(
+    workerId: string,
+    skip: number = 0,
+    take: number = 20,
+    status?: string,
+  ) {
     const where = {
       workerId,
       ...(status ? { status: status as BookingStatus } : {}),
@@ -171,7 +216,9 @@ export class BookingsService {
   }
 
   async updateBookingStatus(bookingId: string, nextStatus: string) {
-    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${bookingId} not found`);
     }
@@ -193,20 +240,29 @@ export class BookingsService {
   }
 
   async cancelBooking(bookingId: string) {
-    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${bookingId} not found`);
     }
 
-    if (booking.status === BookingStatus.IN_PROGRESS || booking.status === BookingStatus.COMPLETED) {
-      throw new BadRequestException('Cannot cancel in-progress or completed booking');
+    if (
+      booking.status === BookingStatus.IN_PROGRESS ||
+      booking.status === BookingStatus.COMPLETED
+    ) {
+      throw new BadRequestException(
+        'Cannot cancel in-progress or completed booking',
+      );
     }
 
     return this.updateBookingStatus(bookingId, BookingStatus.CANCELLED);
   }
 
   async createPriceProposal(bookingId: string, dto: CreatePriceProposalDto) {
-    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId } });
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${bookingId} not found`);
     }
@@ -234,9 +290,12 @@ export class BookingsService {
       this.prisma.priceProposal.findUnique({ where: { id: proposalId } }),
     ]);
 
-    if (!booking) throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    if (!booking)
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
     if (!proposal || proposal.bookingId !== bookingId) {
-      throw new NotFoundException(`Proposal with ID ${proposalId} not found for this booking`);
+      throw new NotFoundException(
+        `Proposal with ID ${proposalId} not found for this booking`,
+      );
     }
 
     await this.prisma.$transaction(async (tx) => {

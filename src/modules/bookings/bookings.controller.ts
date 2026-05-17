@@ -1,6 +1,19 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { BookingsService } from './bookings.service';
-import { CreateBookingDto, CreatePriceProposalDto, UpdateBookingStatusDto } from './dto';
+import {
+  CreateBookingDto,
+  CreatePriceProposalDto,
+  UpdateBookingStatusDto,
+} from './dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -40,7 +53,11 @@ export class BookingsController {
     @Query('take') take: string = '20',
     @Query('status') status?: string,
   ) {
-    return this.bookingsService.getAllBookings(parseInt(skip), parseInt(take), status);
+    return this.bookingsService.getAllBookings(
+      parseInt(skip),
+      parseInt(take),
+      status,
+    );
   }
 
   /**
@@ -55,10 +72,20 @@ export class BookingsController {
     @Query('status') status?: string,
   ) {
     if (user.role === UserRole.CUSTOMER) {
-      return this.bookingsService.getCustomerBookings(user.sub, parseInt(skip), parseInt(take), status);
+      return this.bookingsService.getCustomerBookings(
+        user.sub,
+        parseInt(skip),
+        parseInt(take),
+        status,
+      );
     } else {
       // For workers, we need the worker profile ID, not user ID
-      return this.bookingsService.getWorkerBookingsByUserId(user.sub, parseInt(skip), parseInt(take), status);
+      return this.bookingsService.getWorkerBookingsByUserId(
+        user.sub,
+        parseInt(skip),
+        parseInt(take),
+        status,
+      );
     }
   }
 
@@ -73,7 +100,12 @@ export class BookingsController {
     @Query('take') take: string = '20',
     @Query('status') status?: string,
   ) {
-    return this.bookingsService.getCustomerBookings(customerId, parseInt(skip), parseInt(take), status);
+    return this.bookingsService.getCustomerBookings(
+      customerId,
+      parseInt(skip),
+      parseInt(take),
+      status,
+    );
   }
 
   /**
@@ -87,7 +119,12 @@ export class BookingsController {
     @Query('take') take: string = '20',
     @Query('status') status?: string,
   ) {
-    return this.bookingsService.getWorkerBookings(workerId, parseInt(skip), parseInt(take), status);
+    return this.bookingsService.getWorkerBookings(
+      workerId,
+      parseInt(skip),
+      parseInt(take),
+      status,
+    );
   }
 
   /**
@@ -132,7 +169,10 @@ export class BookingsController {
   ) {
     // Override proposedBy with authenticated user's ID
     createPriceProposalDto.proposedBy = userId;
-    return this.bookingsService.createPriceProposal(bookingId, createPriceProposalDto);
+    return this.bookingsService.createPriceProposal(
+      bookingId,
+      createPriceProposalDto,
+    );
   }
 
   /**

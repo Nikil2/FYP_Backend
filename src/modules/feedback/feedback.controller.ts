@@ -1,4 +1,12 @@
-import { Controller, Post, Get, Param, Body, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { FeedbackService } from './feedback.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -35,7 +43,11 @@ export class FeedbackController {
     @Query('skip') skip: string = '0',
     @Query('take') take: string = '10',
   ) {
-    return this.feedbackService.getWorkerReviews(workerId, parseInt(skip), parseInt(take));
+    return this.feedbackService.getWorkerReviews(
+      workerId,
+      parseInt(skip),
+      parseInt(take),
+    );
   }
 
   /**

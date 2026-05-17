@@ -1,6 +1,18 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { LocationsService } from './locations.service';
-import { CreateLocationDto, UpdateLocationDto } from './dto/create-location.dto';
+import {
+  CreateLocationDto,
+  UpdateLocationDto,
+} from './dto/create-location.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -15,7 +27,10 @@ export class LocationsController {
   }
 
   @Post()
-  async createLocation(@CurrentUser('sub') userId: string, @Body() dto: CreateLocationDto) {
+  async createLocation(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: CreateLocationDto,
+  ) {
     return this.locationsService.createLocation(userId, dto);
   }
 
@@ -29,7 +44,10 @@ export class LocationsController {
   }
 
   @Delete(':id')
-  async deleteLocation(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+  async deleteLocation(
+    @CurrentUser('sub') userId: string,
+    @Param('id') id: string,
+  ) {
     return this.locationsService.deleteLocation(userId, id);
   }
 }

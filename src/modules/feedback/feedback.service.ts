@@ -39,17 +39,23 @@ export class FeedbackService {
 
     // Only the customer who made the booking can leave feedback
     if (booking.customerId !== userId) {
-      throw new ForbiddenException('Only the customer can leave feedback for this booking');
+      throw new ForbiddenException(
+        'Only the customer can leave feedback for this booking',
+      );
     }
 
     // Only completed bookings can receive feedback
     if (booking.status !== BookingStatus.COMPLETED) {
-      throw new BadRequestException('Feedback can only be submitted for completed bookings');
+      throw new BadRequestException(
+        'Feedback can only be submitted for completed bookings',
+      );
     }
 
     // Check if feedback already exists
     if (booking.feedback) {
-      throw new ConflictException('Feedback has already been submitted for this booking');
+      throw new ConflictException(
+        'Feedback has already been submitted for this booking',
+      );
     }
 
     // Create feedback and update worker's average rating in a transaction
@@ -114,7 +120,11 @@ export class FeedbackService {
   /**
    * Get all reviews for a specific worker (paginated).
    */
-  async getWorkerReviews(workerId: string, skip: number = 0, take: number = 10) {
+  async getWorkerReviews(
+    workerId: string,
+    skip: number = 0,
+    take: number = 10,
+  ) {
     const [reviews, total] = await Promise.all([
       this.prisma.feedback.findMany({
         where: {
@@ -167,7 +177,13 @@ export class FeedbackService {
     });
 
     // Build the rating breakdown object
-    const ratingBreakdown: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    const ratingBreakdown: Record<number, number> = {
+      1: 0,
+      2: 0,
+      3: 0,
+      4: 0,
+      5: 0,
+    };
     breakdown.forEach((b) => {
       ratingBreakdown[b.rating] = b._count.rating;
     });

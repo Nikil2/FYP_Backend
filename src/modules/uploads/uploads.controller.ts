@@ -49,7 +49,12 @@ export class UploadsController {
     @Body('workerId') workerId: string,
     @Body('description') description?: string,
   ) {
-    return this.uploadsService.uploadPortfolio(file, workerId, description);
+    return this.uploadsService.uploadPortfolio(
+      file,
+      userId,
+      workerId,
+      description,
+    );
   }
 
   /** POST /uploads/evidence */

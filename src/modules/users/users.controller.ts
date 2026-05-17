@@ -1,4 +1,15 @@
-import { Controller, Post, Get, Put, Delete, Param, Body, Query, HttpCode, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Put,
+  Delete,
+  Param,
+  Body,
+  Query,
+  HttpCode,
+  UseGuards,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
@@ -21,7 +32,9 @@ export class UsersController {
    */
   @Post('register')
   @HttpCode(201)
-  async register(@Body() createUserDto: CreateUserDto): Promise<{ user: UserResponseDto; token: string }> {
+  async register(
+    @Body() createUserDto: CreateUserDto,
+  ): Promise<{ user: UserResponseDto; token: string }> {
     return this.usersService.register(createUserDto);
   }
 
@@ -31,7 +44,9 @@ export class UsersController {
    */
   @Post('login')
   @HttpCode(200)
-  async login(@Body() loginDto: LoginDto): Promise<{ user: UserResponseDto; token: string }> {
+  async login(
+    @Body() loginDto: LoginDto,
+  ): Promise<{ user: UserResponseDto; token: string }> {
     return this.usersService.login(loginDto);
   }
 
@@ -43,7 +58,9 @@ export class UsersController {
    */
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  async getMyProfile(@CurrentUser('sub') userId: string): Promise<UserResponseDto> {
+  async getMyProfile(
+    @CurrentUser('sub') userId: string,
+  ): Promise<UserResponseDto> {
     return this.usersService.getUserById(userId);
   }
 

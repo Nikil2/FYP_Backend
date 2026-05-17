@@ -1,8 +1,20 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAY_NAMES = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
 
 @Injectable()
 export class ScheduleService {
@@ -33,7 +45,9 @@ export class ScheduleService {
     }
 
     // Verify worker exists
-    const worker = await this.prisma.workerProfile.findUnique({ where: { id: workerId } });
+    const worker = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+    });
     if (!worker) {
       throw new NotFoundException('Worker profile not found');
     }
@@ -61,7 +75,9 @@ export class ScheduleService {
    * Set the full weekly schedule at once (replaces all entries).
    */
   async setFullSchedule(workerId: string, entries: CreateScheduleDto[]) {
-    const worker = await this.prisma.workerProfile.findUnique({ where: { id: workerId } });
+    const worker = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+    });
     if (!worker) {
       throw new NotFoundException('Worker profile not found');
     }
@@ -69,7 +85,9 @@ export class ScheduleService {
     // Validate all entries
     for (const entry of entries) {
       if (entry.startTime >= entry.endTime) {
-        throw new BadRequestException(`Invalid time for ${DAY_NAMES[entry.dayOfWeek]}: start must be before end`);
+        throw new BadRequestException(
+          `Invalid time for ${DAY_NAMES[entry.dayOfWeek]}: start must be before end`,
+        );
       }
     }
 
@@ -104,7 +122,9 @@ export class ScheduleService {
       });
       return { message: `${DAY_NAMES[dayOfWeek]} schedule removed` };
     } catch {
-      throw new NotFoundException(`No schedule found for ${DAY_NAMES[dayOfWeek]}`);
+      throw new NotFoundException(
+        `No schedule found for ${DAY_NAMES[dayOfWeek]}`,
+      );
     }
   }
 }

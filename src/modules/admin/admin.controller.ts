@@ -13,7 +13,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { AdminLoginDto, AdminResponseDto, DashboardResponseDto, UpdateServiceDto } from './dto';
+import {
+  AdminLoginDto,
+  AdminResponseDto,
+  DashboardResponseDto,
+  UpdateServiceDto,
+} from './dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -32,7 +37,9 @@ export class AdminController {
    */
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginDto: AdminLoginDto): Promise<{ data: AdminResponseDto; message: string }> {
+  async login(
+    @Body() loginDto: AdminLoginDto,
+  ): Promise<{ data: AdminResponseDto; message: string }> {
     const admin = await this.adminService.validateAdminCredentials(
       loginDto.username,
       loginDto.password,
@@ -164,7 +171,10 @@ export class AdminController {
     @Param('id') workerId: string,
     @CurrentUser('sub') adminUserId: string,
   ) {
-    const worker = await this.adminService.approveWorkerVerification(workerId, adminUserId);
+    const worker = await this.adminService.approveWorkerVerification(
+      workerId,
+      adminUserId,
+    );
     return {
       data: worker,
       message: 'Worker verification approved',
@@ -183,7 +193,11 @@ export class AdminController {
     @Body('reason') reason: string = 'Verification rejected',
     @CurrentUser('sub') adminUserId: string,
   ) {
-    const worker = await this.adminService.rejectWorkerVerification(workerId, adminUserId, reason);
+    const worker = await this.adminService.rejectWorkerVerification(
+      workerId,
+      adminUserId,
+      reason,
+    );
     return {
       data: worker,
       message: 'Worker verification rejected',
@@ -253,7 +267,10 @@ export class AdminController {
     @Param('id') complaintId: string,
     @CurrentUser('sub') adminUserId: string,
   ) {
-    const complaint = await this.adminService.resolveComplaint(complaintId, adminUserId);
+    const complaint = await this.adminService.resolveComplaint(
+      complaintId,
+      adminUserId,
+    );
     return {
       data: complaint,
       message: 'Complaint resolved successfully',
@@ -271,7 +288,10 @@ export class AdminController {
     @Param('id') complaintId: string,
     @Body('adminId') adminId: string,
   ) {
-    const complaint = await this.adminService.assignComplaint(complaintId, adminId);
+    const complaint = await this.adminService.assignComplaint(
+      complaintId,
+      adminId,
+    );
     return {
       data: complaint,
       message: 'Complaint assigned successfully',

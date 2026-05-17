@@ -1,6 +1,18 @@
-import { Controller, Post, Get, Put, Param, Body, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Put,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ComplaintsService } from './complaints.service';
-import { CreateComplaintDto, ResolveComplaintDto } from './dto/create-complaint.dto';
+import {
+  CreateComplaintDto,
+  ResolveComplaintDto,
+} from './dto/create-complaint.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -36,8 +48,13 @@ export class ComplaintsController {
     @Query('take') take: string = '20',
     @Query('resolved') resolved?: string,
   ) {
-    const isResolved = resolved === 'true' ? true : resolved === 'false' ? false : undefined;
-    return this.complaintsService.getAllComplaints(parseInt(skip), parseInt(take), isResolved);
+    const isResolved =
+      resolved === 'true' ? true : resolved === 'false' ? false : undefined;
+    return this.complaintsService.getAllComplaints(
+      parseInt(skip),
+      parseInt(take),
+      isResolved,
+    );
   }
 
   /**
@@ -70,6 +87,10 @@ export class ComplaintsController {
     @Param('id') complaintId: string,
     @Body() dto: ResolveComplaintDto,
   ) {
-    return this.complaintsService.resolveComplaint(adminUserId, complaintId, dto);
+    return this.complaintsService.resolveComplaint(
+      adminUserId,
+      complaintId,
+      dto,
+    );
   }
 }

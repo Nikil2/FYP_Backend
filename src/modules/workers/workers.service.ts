@@ -18,7 +18,9 @@ export class WorkersService {
   /**
    * Register a new worker
    */
-  async registerWorker(createWorkerDto: CreateWorkerDto): Promise<WorkerResponseDto> {
+  async registerWorker(
+    createWorkerDto: CreateWorkerDto,
+  ): Promise<WorkerResponseDto> {
     const {
       phoneNumber,
       password,
@@ -56,7 +58,9 @@ export class WorkersService {
     });
 
     if (existingUser) {
-      throw new ConflictException(`User with phone number ${phoneNumber} already exists`);
+      throw new ConflictException(
+        `User with phone number ${phoneNumber} already exists`,
+      );
     }
 
     // Check if CNIC already registered
@@ -65,7 +69,9 @@ export class WorkersService {
     });
 
     if (existingCnic) {
-      throw new ConflictException(`CNIC ${cnicNumber} is already registered as a worker`);
+      throw new ConflictException(
+        `CNIC ${cnicNumber} is already registered as a worker`,
+      );
     }
 
     // Verify all services exist
@@ -80,7 +86,7 @@ export class WorkersService {
     // Accept both legacy portfolioImages and direct Cloudinary URL arrays from frontend.
     const normalizedPortfolioImages = [
       ...(portfolioImages || []),
-      ...((workPhotosUrls || []).map((imageUrl) => ({ imageUrl }))),
+      ...(workPhotosUrls || []).map((imageUrl) => ({ imageUrl })),
     ].filter((portfolio) => Boolean(portfolio?.imageUrl));
 
     try {
@@ -148,8 +154,8 @@ export class WorkersService {
       // Fetch the complete profile with services and portfolio
       const completeProfile = await this.prisma.workerProfile.findUnique({
         where: { id: result.workerProfile.id },
-        include: { 
-          user: true, 
+        include: {
+          user: true,
           services: { include: { service: true } },
           portfolio: true,
         },
@@ -160,7 +166,9 @@ export class WorkersService {
       if (error instanceof ConflictException) throw error;
       if (error instanceof BadRequestException) throw error;
 
-      throw new BadRequestException('Failed to register worker. Please try again.');
+      throw new BadRequestException(
+        'Failed to register worker. Please try again.',
+      );
     }
   }
 
@@ -170,8 +178,8 @@ export class WorkersService {
   async getWorkerById(workerId: string): Promise<WorkerResponseDto> {
     const workerProfile = await this.prisma.workerProfile.findUnique({
       where: { id: workerId },
-      include: { 
-        user: true, 
+      include: {
+        user: true,
         services: { include: { service: true } },
         portfolio: true,
       },
@@ -190,15 +198,17 @@ export class WorkersService {
   async getWorkerByUserId(userId: string): Promise<WorkerResponseDto> {
     const workerProfile = await this.prisma.workerProfile.findUnique({
       where: { userId },
-      include: { 
-        user: true, 
+      include: {
+        user: true,
         services: { include: { service: true } },
         portfolio: true,
       },
     });
 
     if (!workerProfile) {
-      throw new NotFoundException(`Worker profile for user ${userId} not found`);
+      throw new NotFoundException(
+        `Worker profile for user ${userId} not found`,
+      );
     }
 
     return this.mapToResponseDto(workerProfile.user, workerProfile);
@@ -207,11 +217,14 @@ export class WorkersService {
   /**
    * Update worker profile
    */
-  async updateWorker(workerId: string, updateData: Partial<CreateWorkerDto>): Promise<WorkerResponseDto> {
+  async updateWorker(
+    workerId: string,
+    updateData: Partial<CreateWorkerDto>,
+  ): Promise<WorkerResponseDto> {
     const workerProfile = await this.prisma.workerProfile.findUnique({
       where: { id: workerId },
-      include: { 
-        user: true, 
+      include: {
+        user: true,
         services: { include: { service: true } },
         portfolio: true,
       },
@@ -224,7 +237,11 @@ export class WorkersService {
     try {
       const updated = await this.prisma.$transaction(async (tx) => {
         // Update user fields if provided
-        if (updateData.fullName || updateData.profilePicUrl || updateData.fcmToken) {
+        if (
+          updateData.fullName ||
+          updateData.profilePicUrl ||
+          updateData.fcmToken
+        ) {
           await tx.user.update({
             where: { id: workerProfile.userId },
             data: {
@@ -246,8 +263,8 @@ export class WorkersService {
             homeLat: updateData.homeLat,
             homeLng: updateData.homeLng,
           },
-          include: { 
-            user: true, 
+          include: {
+            user: true,
             services: { include: { service: true } },
             portfolio: true,
           },
@@ -265,10 +282,13 @@ export class WorkersService {
   /**
    * Get all workers (paginated)
    */
-  async getAllWorkers(skip: number = 0, take: number = 10): Promise<WorkerResponseDto[]> {
+  async getAllWorkers(
+    skip: number = 0,
+    take: number = 10,
+  ): Promise<WorkerResponseDto[]> {
     const workers = await this.prisma.workerProfile.findMany({
-      include: { 
-        user: true, 
+      include: {
+        user: true,
         services: { include: { service: true } },
         portfolio: true,
       },
@@ -282,11 +302,14 @@ export class WorkersService {
   /**
    * Get verified workers only
    */
-  async getVerifiedWorkers(skip: number = 0, take: number = 10): Promise<WorkerResponseDto[]> {
+  async getVerifiedWorkers(
+    skip: number = 0,
+    take: number = 10,
+  ): Promise<WorkerResponseDto[]> {
     const workers = await this.prisma.workerProfile.findMany({
       where: { verificationStatus: VerificationStatus.APPROVED },
-      include: { 
-        user: true, 
+      include: {
+        user: true,
         services: { include: { service: true } },
         portfolio: true,
       },
@@ -300,7 +323,10 @@ export class WorkersService {
   /**
    * Update worker online status
    */
-  async updateOnlineStatus(workerId: string, isOnline: boolean): Promise<UpdateOnlineStatusResponseDto> {
+  async updateOnlineStatus(
+    workerId: string,
+    isOnline: boolean,
+  ): Promise<UpdateOnlineStatusResponseDto> {
     const worker = await this.prisma.workerProfile.findUnique({
       where: { id: workerId },
     });
@@ -330,12 +356,19 @@ export class WorkersService {
     skip: number = 0,
     take: number = 20,
   ) {
-    const worker = await this.prisma.workerProfile.findUnique({ where: { id: workerId } });
+    const worker = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+    });
     if (!worker) {
       throw new NotFoundException(`Worker with ID ${workerId} not found`);
     }
 
-    const activeStatuses = ['PENDING', 'NEGOTIATION', 'ACCEPTED', 'IN_PROGRESS'];
+    const activeStatuses = [
+      'PENDING',
+      'NEGOTIATION',
+      'ACCEPTED',
+      'IN_PROGRESS',
+    ];
     const pastStatuses = ['COMPLETED', 'CANCELLED', 'DISPUTED'];
     const statusList = status === 'past' ? pastStatuses : activeStatuses;
 
@@ -374,7 +407,9 @@ export class WorkersService {
    * Wallet summary based on completed bookings
    */
   async getWalletSummary(workerId: string) {
-    const worker = await this.prisma.workerProfile.findUnique({ where: { id: workerId } });
+    const worker = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+    });
     if (!worker) {
       throw new NotFoundException(`Worker with ID ${workerId} not found`);
     }
@@ -392,7 +427,10 @@ export class WorkersService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const totalEarnings = completed.reduce((sum, b) => sum + Number(b.finalPrice || 0), 0);
+    const totalEarnings = completed.reduce(
+      (sum, b) => sum + Number(b.finalPrice || 0),
+      0,
+    );
     const pending = await this.prisma.booking.findMany({
       where: {
         workerId,
@@ -401,7 +439,10 @@ export class WorkersService {
       },
       select: { finalPrice: true },
     });
-    const pendingBalance = pending.reduce((sum, b) => sum + Number(b.finalPrice || 0), 0);
+    const pendingBalance = pending.reduce(
+      (sum, b) => sum + Number(b.finalPrice || 0),
+      0,
+    );
 
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -422,7 +463,9 @@ export class WorkersService {
    * Wallet transactions list derived from completed bookings
    */
   async getWalletTransactions(workerId: string) {
-    const worker = await this.prisma.workerProfile.findUnique({ where: { id: workerId } });
+    const worker = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+    });
     if (!worker) {
       throw new NotFoundException(`Worker with ID ${workerId} not found`);
     }
@@ -533,7 +576,9 @@ export class WorkersService {
   /**
    * Get portfolio images for a worker
    */
-  async getPortfolio(workerId: string): Promise<Array<{ id: string; imageUrl: string; description?: string }>> {
+  async getPortfolio(
+    workerId: string,
+  ): Promise<Array<{ id: string; imageUrl: string; description?: string }>> {
     const workerExists = await this.prisma.workerProfile.findUnique({
       where: { id: workerId },
     });
@@ -556,7 +601,10 @@ export class WorkersService {
   /**
    * Delete portfolio image
    */
-  async deletePortfolioImage(workerId: string, portfolioId: string): Promise<{ message: string }> {
+  async deletePortfolioImage(
+    workerId: string,
+    portfolioId: string,
+  ): Promise<{ message: string }> {
     const portfolio = await this.prisma.workerPortfolio.findUnique({
       where: { id: portfolioId },
     });
@@ -566,7 +614,9 @@ export class WorkersService {
     }
 
     if (portfolio.workerId !== workerId) {
-      throw new BadRequestException('Unauthorized: Portfolio image does not belong to this worker');
+      throw new BadRequestException(
+        'Unauthorized: Portfolio image does not belong to this worker',
+      );
     }
 
     await this.prisma.workerPortfolio.delete({
@@ -593,7 +643,9 @@ export class WorkersService {
     }
 
     if (portfolio.workerId !== workerId) {
-      throw new BadRequestException('Unauthorized: Portfolio image does not belong to this worker');
+      throw new BadRequestException(
+        'Unauthorized: Portfolio image does not belong to this worker',
+      );
     }
 
     const updated = await this.prisma.workerPortfolio.update({

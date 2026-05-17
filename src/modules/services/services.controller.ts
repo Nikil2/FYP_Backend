@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Body, Param, Put, ParseIntPipe, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Put,
+  ParseIntPipe,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ServicesService } from './services.service';
 import { CreateServiceDto, ServiceResponseDto } from './dto';
 
@@ -38,7 +48,9 @@ export class ServicesController {
    * GET /services/:id
    */
   @Get(':id')
-  async getServiceById(@Param('id', ParseIntPipe) id: number): Promise<ServiceResponseDto> {
+  async getServiceById(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<ServiceResponseDto> {
     return this.servicesService.getServiceById(id);
   }
 
@@ -48,7 +60,9 @@ export class ServicesController {
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  async createService(@Body() createServiceDto: CreateServiceDto): Promise<ServiceResponseDto> {
+  async createService(
+    @Body() createServiceDto: CreateServiceDto,
+  ): Promise<ServiceResponseDto> {
     return this.servicesService.createService(createServiceDto);
   }
 
@@ -69,7 +83,9 @@ export class ServicesController {
    * POST /services/:id/deactivate
    */
   @Post(':id/deactivate')
-  async deactivateService(@Param('id', ParseIntPipe) id: number): Promise<ServiceResponseDto> {
+  async deactivateService(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<ServiceResponseDto> {
     return this.servicesService.deactivateService(id);
   }
 }

@@ -1,6 +1,22 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, Query, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+} from '@nestjs/common';
 import { WorkersService } from './workers.service';
-import { CreateWorkerDto, WorkerResponseDto, UpdateOnlineStatusResponseDto } from './dto';
+import {
+  CreateWorkerDto,
+  WorkerResponseDto,
+  UpdateOnlineStatusResponseDto,
+} from './dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -19,7 +35,9 @@ export class WorkersController {
    */
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  async registerWorker(@Body() createWorkerDto: CreateWorkerDto): Promise<WorkerResponseDto> {
+  async registerWorker(
+    @Body() createWorkerDto: CreateWorkerDto,
+  ): Promise<WorkerResponseDto> {
     return this.workersService.registerWorker(createWorkerDto);
   }
 
@@ -44,7 +62,10 @@ export class WorkersController {
     @Query('skip') skip: string = '0',
     @Query('take') take: string = '10',
   ): Promise<WorkerResponseDto[]> {
-    return this.workersService.getVerifiedWorkers(parseInt(skip), parseInt(take));
+    return this.workersService.getVerifiedWorkers(
+      parseInt(skip),
+      parseInt(take),
+    );
   }
 
   /**
@@ -52,7 +73,9 @@ export class WorkersController {
    * GET /workers/:id
    */
   @Get(':id')
-  async getWorkerById(@Param('id') workerId: string): Promise<WorkerResponseDto> {
+  async getWorkerById(
+    @Param('id') workerId: string,
+  ): Promise<WorkerResponseDto> {
     return this.workersService.getWorkerById(workerId);
   }
 
@@ -65,7 +88,9 @@ export class WorkersController {
   @Get('me/profile')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.WORKER)
-  async getMyWorkerProfile(@CurrentUser('sub') userId: string): Promise<WorkerResponseDto> {
+  async getMyWorkerProfile(
+    @CurrentUser('sub') userId: string,
+  ): Promise<WorkerResponseDto> {
     return this.workersService.getWorkerByUserId(userId);
   }
 
@@ -75,7 +100,9 @@ export class WorkersController {
    */
   @Get('user/:userId')
   @UseGuards(JwtAuthGuard)
-  async getWorkerByUserId(@Param('userId') userId: string): Promise<WorkerResponseDto> {
+  async getWorkerByUserId(
+    @Param('userId') userId: string,
+  ): Promise<WorkerResponseDto> {
     return this.workersService.getWorkerByUserId(userId);
   }
 
@@ -85,7 +112,9 @@ export class WorkersController {
    */
   @Get('me/:userId')
   @UseGuards(JwtAuthGuard)
-  async getMyWorkerProfileById(@Param('userId') userId: string): Promise<WorkerResponseDto> {
+  async getMyWorkerProfileById(
+    @Param('userId') userId: string,
+  ): Promise<WorkerResponseDto> {
     return this.workersService.getWorkerByUserId(userId);
   }
 
@@ -127,7 +156,12 @@ export class WorkersController {
     @Query('skip') skip: string = '0',
     @Query('take') take: string = '20',
   ) {
-    return this.workersService.getWorkerOrders(workerId, status, parseInt(skip), parseInt(take));
+    return this.workersService.getWorkerOrders(
+      workerId,
+      status,
+      parseInt(skip),
+      parseInt(take),
+    );
   }
 
   /**
@@ -160,7 +194,11 @@ export class WorkersController {
     @Param('id') workerId: string,
     @Body() body: { imageUrl: string; description?: string },
   ): Promise<{ id: string; imageUrl: string; description?: string }> {
-    return this.workersService.addPortfolioImage(workerId, body.imageUrl, body.description);
+    return this.workersService.addPortfolioImage(
+      workerId,
+      body.imageUrl,
+      body.description,
+    );
   }
 
   /**
@@ -168,7 +206,9 @@ export class WorkersController {
    * GET /workers/:id/portfolio
    */
   @Get(':id/portfolio')
-  async getPortfolio(@Param('id') workerId: string): Promise<Array<{ id: string; imageUrl: string; description?: string }>> {
+  async getPortfolio(
+    @Param('id') workerId: string,
+  ): Promise<Array<{ id: string; imageUrl: string; description?: string }>> {
     return this.workersService.getPortfolio(workerId);
   }
 
@@ -196,6 +236,10 @@ export class WorkersController {
     @Param('portfolioId') portfolioId: string,
     @Body() body: { description: string },
   ): Promise<{ id: string; imageUrl: string; description?: string }> {
-    return this.workersService.updatePortfolioImage(workerId, portfolioId, body.description);
+    return this.workersService.updatePortfolioImage(
+      workerId,
+      portfolioId,
+      body.description,
+    );
   }
 }

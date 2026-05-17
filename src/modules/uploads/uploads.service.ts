@@ -1,15 +1,37 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import { PrismaService } from '../../../prisma/prisma.service';
 
-export type FileCategory = 'profile-picture' | 'cnic' | 'portfolio' | 'evidence' | 'message';
+export type FileCategory =
+  | 'profile-picture'
+  | 'cnic'
+  | 'portfolio'
+  | 'evidence'
+  | 'message';
 
-const FILE_LIMITS: Record<FileCategory, { maxSizeMB: number; allowedTypes: string[] }> = {
-  'profile-picture': { maxSizeMB: 5, allowedTypes: ['image/jpeg', 'image/png', 'image/webp'] },
-  'cnic': { maxSizeMB: 5, allowedTypes: ['image/jpeg', 'image/png'] },
-  'portfolio': { maxSizeMB: 10, allowedTypes: ['image/jpeg', 'image/png', 'image/webp'] },
-  'evidence': { maxSizeMB: 20, allowedTypes: ['image/jpeg', 'image/png', 'application/pdf'] },
-  'message': { maxSizeMB: 10, allowedTypes: ['image/jpeg', 'image/png'] },
+const FILE_LIMITS: Record<
+  FileCategory,
+  { maxSizeMB: number; allowedTypes: string[] }
+> = {
+  'profile-picture': {
+    maxSizeMB: 5,
+    allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  },
+  cnic: { maxSizeMB: 5, allowedTypes: ['image/jpeg', 'image/png'] },
+  portfolio: {
+    maxSizeMB: 10,
+    allowedTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  },
+  evidence: {
+    maxSizeMB: 20,
+    allowedTypes: ['image/jpeg', 'image/png', 'application/pdf'],
+  },
+  message: { maxSizeMB: 10, allowedTypes: ['image/jpeg', 'image/png'] },
 };
 
 @Injectable()
@@ -27,11 +49,7 @@ export class UploadsService {
    * Upload a file to Cloudinary.
    * Validates file type and size based on category.
    */
-  async uploadFile(
-    file: Express.Multer.File,
-    category: FileCategory,
-    userId: string,
-  ) {
+  async uploadFile(file: Express.Multer.File, category: FileCategory) {
     // Validate file
     const limits = FILE_LIMITS[category];
     if (!limits) {
@@ -46,7 +64,9 @@ export class UploadsService {
 
     const maxSizeBytes = limits.maxSizeMB * 1024 * 1024;
     if (file.size > maxSizeBytes) {
-      throw new BadRequestException(`File too large. Maximum: ${limits.maxSizeMB}MB`);
+      throw new BadRequestException(
+        `File too large. Maximum: ${limits.maxSizeMB}MB`,
+      );
     }
 
     // Upload to Cloudinary
@@ -66,7 +86,7 @@ export class UploadsService {
    * Upload profile picture and update user record.
    */
   async uploadProfilePicture(file: Express.Multer.File, userId: string) {
-    const result = await this.uploadFile(file, 'profile-picture', userId);
+    const result = await this.uploadFile(file, 'profile-picture');
 
     // Update user's profile picture URL
     await this.prisma.user.update({
@@ -80,13 +100,18 @@ export class UploadsService {
   /**
    * Upload CNIC images (front/back) for worker verification.
    */
-  async uploadCnic(file: Express.Multer.File, userId: string, side: 'front' | 'back') {
-    const result = await this.uploadFile(file, 'cnic', userId);
+  async uploadCnic(
+    file: Express.Multer.File,
+    userId: string,
+    side: 'front' | 'back',
+  ) {
+    const result = await this.uploadFile(file, 'cnic');
 
     // Update worker profile with CNIC URL
-    const updateData = side === 'front'
-      ? { cnicFrontUrl: result.url }
-      : { cnicBackUrl: result.url };
+    const updateData =
+      side === 'front'
+        ? { cnicFrontUrl: result.url }
+        : { cnicBackUrl: result.url };
 
     await this.prisma.workerProfile.update({
       where: { userId },
@@ -99,8 +124,28 @@ export class UploadsService {
   /**
    * Upload portfolio image for a worker.
    */
-  async uploadPortfolio(file: Express.Multer.File, workerId: string, description?: string) {
-    const result = await this.uploadFile(file, 'portfolio', workerId);
+  async uploadPortfolio(
+    file: Express.Multer.File,
+    userId: string,
+    workerId: string,
+    description?: string,
+  ) {
+    const workerProfile = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+      select: { userId: true },
+    });
+
+    if (!workerProfile) {
+      throw new NotFoundException('Worker profile not found');
+    }
+
+    if (workerProfile.userId !== userId) {
+      throw new ForbiddenException(
+        'You can only upload portfolio for your own profile',
+      );
+    }
+
+    const result = await this.uploadFile(file, 'portfolio');
 
     const portfolio = await this.prisma.workerPortfolio.create({
       data: {
@@ -117,7 +162,16 @@ export class UploadsService {
    * Upload evidence for a complaint.
    */
   async uploadEvidence(file: Express.Multer.File, userId: string) {
-    return this.uploadFile(file, 'evidence', userId);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.uploadFile(file, 'evidence');
   }
 
   /**

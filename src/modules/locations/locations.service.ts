@@ -1,6 +1,13 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { CreateLocationDto, UpdateLocationDto } from './dto/create-location.dto';
+import {
+  CreateLocationDto,
+  UpdateLocationDto,
+} from './dto/create-location.dto';
 
 const MAX_LOCATIONS_PER_USER = 10;
 
@@ -17,7 +24,9 @@ export class LocationsService {
   async createLocation(userId: string, dto: CreateLocationDto) {
     const count = await this.prisma.savedLocation.count({ where: { userId } });
     if (count >= MAX_LOCATIONS_PER_USER) {
-      throw new BadRequestException(`Maximum ${MAX_LOCATIONS_PER_USER} saved locations allowed`);
+      throw new BadRequestException(
+        `Maximum ${MAX_LOCATIONS_PER_USER} saved locations allowed`,
+      );
     }
 
     return this.prisma.savedLocation.create({
@@ -25,8 +34,14 @@ export class LocationsService {
     });
   }
 
-  async updateLocation(userId: string, locationId: string, dto: UpdateLocationDto) {
-    const location = await this.prisma.savedLocation.findUnique({ where: { id: locationId } });
+  async updateLocation(
+    userId: string,
+    locationId: string,
+    dto: UpdateLocationDto,
+  ) {
+    const location = await this.prisma.savedLocation.findUnique({
+      where: { id: locationId },
+    });
     if (!location || location.userId !== userId) {
       throw new NotFoundException('Location not found');
     }
@@ -38,7 +53,9 @@ export class LocationsService {
   }
 
   async deleteLocation(userId: string, locationId: string) {
-    const location = await this.prisma.savedLocation.findUnique({ where: { id: locationId } });
+    const location = await this.prisma.savedLocation.findUnique({
+      where: { id: locationId },
+    });
     if (!location || location.userId !== userId) {
       throw new NotFoundException('Location not found');
     }
