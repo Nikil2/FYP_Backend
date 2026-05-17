@@ -8,6 +8,7 @@ import { WorkersModule } from './modules/workers/workers.module';
 import { ServicesModule } from './modules/services/services.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
+import { AuthModule } from './modules/auth/auth.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { BookingsModule } from './modules/bookings/bookings.module';
       envFilePath: '.env',
     }),
     PrismaModule,
+    AuthModule,
     UsersModule,
     WorkersModule,
     ServicesModule,

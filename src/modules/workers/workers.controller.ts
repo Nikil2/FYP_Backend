@@ -1,13 +1,20 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Body, Param, Query, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { WorkersService } from './workers.service';
 import { CreateWorkerDto, WorkerResponseDto, UpdateOnlineStatusResponseDto } from './dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRole } from '@prisma/client';
 
 @Controller('workers')
 export class WorkersController {
   constructor(private readonly workersService: WorkersService) {}
 
+  // ==================== PUBLIC ENDPOINTS ====================
+
   /**
-   * Register a new worker
+   * Register a new worker (public — done during signup)
    * POST /workers/register
    */
   @Post('register')
@@ -17,7 +24,7 @@ export class WorkersController {
   }
 
   /**
-   * Get all workers (paginated)
+   * Get all workers (public — for customer browsing)
    * GET /workers?skip=0&take=10
    */
   @Get()
@@ -29,7 +36,7 @@ export class WorkersController {
   }
 
   /**
-   * Get verified workers only
+   * Get verified workers only (public)
    * GET /workers/verified?skip=0&take=10
    */
   @Get('verified')
@@ -41,25 +48,7 @@ export class WorkersController {
   }
 
   /**
-   * Get worker by ID
-   * GET /workers/:id
-   */
-  @Get('user/:userId')
-  async getWorkerByUserId(@Param('userId') userId: string): Promise<WorkerResponseDto> {
-    return this.workersService.getWorkerByUserId(userId);
-  }
-
-  /**
-   * Get worker dashboard profile by user ID
-   * GET /workers/me/:userId
-   */
-  @Get('me/:userId')
-  async getMyWorkerProfile(@Param('userId') userId: string): Promise<WorkerResponseDto> {
-    return this.workersService.getWorkerByUserId(userId);
-  }
-
-  /**
-   * Get worker by ID
+   * Get worker by ID (public — for customer viewing worker detail)
    * GET /workers/:id
    */
   @Get(':id')
@@ -67,11 +56,45 @@ export class WorkersController {
     return this.workersService.getWorkerById(workerId);
   }
 
+  // ==================== AUTHENTICATED ENDPOINTS ====================
+
+  /**
+   * Get current worker's profile using JWT
+   * GET /workers/me/profile
+   */
+  @Get('me/profile')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.WORKER)
+  async getMyWorkerProfile(@CurrentUser('sub') userId: string): Promise<WorkerResponseDto> {
+    return this.workersService.getWorkerByUserId(userId);
+  }
+
+  /**
+   * Get worker by user ID
+   * GET /workers/user/:userId
+   */
+  @Get('user/:userId')
+  @UseGuards(JwtAuthGuard)
+  async getWorkerByUserId(@Param('userId') userId: string): Promise<WorkerResponseDto> {
+    return this.workersService.getWorkerByUserId(userId);
+  }
+
+  /**
+   * Get worker dashboard profile by user ID (legacy — use /me/profile instead)
+   * GET /workers/me/:userId
+   */
+  @Get('me/:userId')
+  @UseGuards(JwtAuthGuard)
+  async getMyWorkerProfileById(@Param('userId') userId: string): Promise<WorkerResponseDto> {
+    return this.workersService.getWorkerByUserId(userId);
+  }
+
   /**
    * Update worker profile
    * PUT /workers/:id
    */
   @Put(':id')
+  @UseGuards(JwtAuthGuard)
   async updateWorker(
     @Param('id') workerId: string,
     @Body() updateData: Partial<CreateWorkerDto>,
@@ -84,6 +107,7 @@ export class WorkersController {
    * PUT /workers/:id/online-status
    */
   @Put(':id/online-status')
+  @UseGuards(JwtAuthGuard)
   async updateOnlineStatus(
     @Param('id') workerId: string,
     @Body() body: { isOnline: boolean },
@@ -96,6 +120,7 @@ export class WorkersController {
    * GET /workers/:id/orders?status=active|past
    */
   @Get(':id/orders')
+  @UseGuards(JwtAuthGuard)
   async getWorkerOrders(
     @Param('id') workerId: string,
     @Query('status') status: string = 'active',
@@ -110,6 +135,7 @@ export class WorkersController {
    * GET /workers/:id/wallet/summary
    */
   @Get(':id/wallet/summary')
+  @UseGuards(JwtAuthGuard)
   async getWalletSummary(@Param('id') workerId: string) {
     return this.workersService.getWalletSummary(workerId);
   }
@@ -119,6 +145,7 @@ export class WorkersController {
    * GET /workers/:id/wallet/transactions
    */
   @Get(':id/wallet/transactions')
+  @UseGuards(JwtAuthGuard)
   async getWalletTransactions(@Param('id') workerId: string) {
     return this.workersService.getWalletTransactions(workerId);
   }
@@ -128,6 +155,7 @@ export class WorkersController {
    * POST /workers/:id/portfolio
    */
   @Post(':id/portfolio')
+  @UseGuards(JwtAuthGuard)
   async addPortfolioImage(
     @Param('id') workerId: string,
     @Body() body: { imageUrl: string; description?: string },
@@ -136,7 +164,7 @@ export class WorkersController {
   }
 
   /**
-   * Get portfolio images
+   * Get portfolio images (public)
    * GET /workers/:id/portfolio
    */
   @Get(':id/portfolio')
@@ -149,6 +177,7 @@ export class WorkersController {
    * DELETE /workers/:id/portfolio/:portfolioId
    */
   @Delete(':id/portfolio/:portfolioId')
+  @UseGuards(JwtAuthGuard)
   async deletePortfolioImage(
     @Param('id') workerId: string,
     @Param('portfolioId') portfolioId: string,
@@ -161,6 +190,7 @@ export class WorkersController {
    * PUT /workers/:id/portfolio/:portfolioId
    */
   @Put(':id/portfolio/:portfolioId')
+  @UseGuards(JwtAuthGuard)
   async updatePortfolioImage(
     @Param('id') workerId: string,
     @Param('portfolioId') portfolioId: string,
