@@ -1,23 +1,48 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, Query, HttpCode, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+} from '@nestjs/common';
 import { WorkersService } from './workers.service';
-import { CreateWorkerDto, WorkerResponseDto, UpdateOnlineStatusResponseDto } from './dto';
+import {
+  CreateWorkerDto,
+  WorkerResponseDto,
+  UpdateOnlineStatusResponseDto,
+} from './dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRole } from '@prisma/client';
 
 @Controller('workers')
 export class WorkersController {
   constructor(private readonly workersService: WorkersService) {}
 
+  // ==================== PUBLIC ENDPOINTS ====================
+
   /**
-   * Register a new worker
+   * Register a new worker (public — done during signup)
    * POST /workers/register
    */
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  async registerWorker(@Body() createWorkerDto: CreateWorkerDto): Promise<WorkerResponseDto> {
+  async registerWorker(
+    @Body() createWorkerDto: CreateWorkerDto,
+  ): Promise<WorkerResponseDto> {
     return this.workersService.registerWorker(createWorkerDto);
   }
 
   /**
-   * Get all workers (paginated)
+   * Get all workers (public — for customer browsing)
    * GET /workers?skip=0&take=10
    */
   @Get()
@@ -29,7 +54,7 @@ export class WorkersController {
   }
 
   /**
-   * Get verified workers only
+   * Get verified workers only (public)
    * GET /workers/verified?skip=0&take=10
    */
   @Get('verified')
@@ -37,34 +62,60 @@ export class WorkersController {
     @Query('skip') skip: string = '0',
     @Query('take') take: string = '10',
   ): Promise<WorkerResponseDto[]> {
-    return this.workersService.getVerifiedWorkers(parseInt(skip), parseInt(take));
+    return this.workersService.getVerifiedWorkers(
+      parseInt(skip),
+      parseInt(take),
+    );
   }
 
   /**
-   * Get worker by ID
-   * GET /workers/:id
-   */
-  @Get('user/:userId')
-  async getWorkerByUserId(@Param('userId') userId: string): Promise<WorkerResponseDto> {
-    return this.workersService.getWorkerByUserId(userId);
-  }
-
-  /**
-   * Get worker dashboard profile by user ID
-   * GET /workers/me/:userId
-   */
-  @Get('me/:userId')
-  async getMyWorkerProfile(@Param('userId') userId: string): Promise<WorkerResponseDto> {
-    return this.workersService.getWorkerByUserId(userId);
-  }
-
-  /**
-   * Get worker by ID
+   * Get worker by ID (public — for customer viewing worker detail)
    * GET /workers/:id
    */
   @Get(':id')
-  async getWorkerById(@Param('id') workerId: string): Promise<WorkerResponseDto> {
+  async getWorkerById(
+    @Param('id') workerId: string,
+  ): Promise<WorkerResponseDto> {
     return this.workersService.getWorkerById(workerId);
+  }
+
+  // ==================== AUTHENTICATED ENDPOINTS ====================
+
+  /**
+   * Get current worker's profile using JWT
+   * GET /workers/me/profile
+   */
+  @Get('me/profile')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.WORKER)
+  async getMyWorkerProfile(
+    @CurrentUser('sub') userId: string,
+  ): Promise<WorkerResponseDto> {
+    return this.workersService.getWorkerByUserId(userId);
+  }
+
+  /**
+   * Get worker by user ID
+   * GET /workers/user/:userId
+   */
+  @Get('user/:userId')
+  @UseGuards(JwtAuthGuard)
+  async getWorkerByUserId(
+    @Param('userId') userId: string,
+  ): Promise<WorkerResponseDto> {
+    return this.workersService.getWorkerByUserId(userId);
+  }
+
+  /**
+   * Get worker dashboard profile by user ID (legacy — use /me/profile instead)
+   * GET /workers/me/:userId
+   */
+  @Get('me/:userId')
+  @UseGuards(JwtAuthGuard)
+  async getMyWorkerProfileById(
+    @Param('userId') userId: string,
+  ): Promise<WorkerResponseDto> {
+    return this.workersService.getWorkerByUserId(userId);
   }
 
   /**
@@ -72,6 +123,7 @@ export class WorkersController {
    * PUT /workers/:id
    */
   @Put(':id')
+  @UseGuards(JwtAuthGuard)
   async updateWorker(
     @Param('id') workerId: string,
     @Body() updateData: Partial<CreateWorkerDto>,
@@ -84,6 +136,7 @@ export class WorkersController {
    * PUT /workers/:id/online-status
    */
   @Put(':id/online-status')
+  @UseGuards(JwtAuthGuard)
   async updateOnlineStatus(
     @Param('id') workerId: string,
     @Body() body: { isOnline: boolean },
@@ -96,13 +149,19 @@ export class WorkersController {
    * GET /workers/:id/orders?status=active|past
    */
   @Get(':id/orders')
+  @UseGuards(JwtAuthGuard)
   async getWorkerOrders(
     @Param('id') workerId: string,
     @Query('status') status: string = 'active',
     @Query('skip') skip: string = '0',
     @Query('take') take: string = '20',
   ) {
-    return this.workersService.getWorkerOrders(workerId, status, parseInt(skip), parseInt(take));
+    return this.workersService.getWorkerOrders(
+      workerId,
+      status,
+      parseInt(skip),
+      parseInt(take),
+    );
   }
 
   /**
@@ -110,6 +169,7 @@ export class WorkersController {
    * GET /workers/:id/wallet/summary
    */
   @Get(':id/wallet/summary')
+  @UseGuards(JwtAuthGuard)
   async getWalletSummary(@Param('id') workerId: string) {
     return this.workersService.getWalletSummary(workerId);
   }
@@ -119,6 +179,7 @@ export class WorkersController {
    * GET /workers/:id/wallet/transactions
    */
   @Get(':id/wallet/transactions')
+  @UseGuards(JwtAuthGuard)
   async getWalletTransactions(@Param('id') workerId: string) {
     return this.workersService.getWalletTransactions(workerId);
   }
@@ -128,19 +189,26 @@ export class WorkersController {
    * POST /workers/:id/portfolio
    */
   @Post(':id/portfolio')
+  @UseGuards(JwtAuthGuard)
   async addPortfolioImage(
     @Param('id') workerId: string,
     @Body() body: { imageUrl: string; description?: string },
   ): Promise<{ id: string; imageUrl: string; description?: string }> {
-    return this.workersService.addPortfolioImage(workerId, body.imageUrl, body.description);
+    return this.workersService.addPortfolioImage(
+      workerId,
+      body.imageUrl,
+      body.description,
+    );
   }
 
   /**
-   * Get portfolio images
+   * Get portfolio images (public)
    * GET /workers/:id/portfolio
    */
   @Get(':id/portfolio')
-  async getPortfolio(@Param('id') workerId: string): Promise<Array<{ id: string; imageUrl: string; description?: string }>> {
+  async getPortfolio(
+    @Param('id') workerId: string,
+  ): Promise<Array<{ id: string; imageUrl: string; description?: string }>> {
     return this.workersService.getPortfolio(workerId);
   }
 
@@ -149,6 +217,7 @@ export class WorkersController {
    * DELETE /workers/:id/portfolio/:portfolioId
    */
   @Delete(':id/portfolio/:portfolioId')
+  @UseGuards(JwtAuthGuard)
   async deletePortfolioImage(
     @Param('id') workerId: string,
     @Param('portfolioId') portfolioId: string,
@@ -161,11 +230,16 @@ export class WorkersController {
    * PUT /workers/:id/portfolio/:portfolioId
    */
   @Put(':id/portfolio/:portfolioId')
+  @UseGuards(JwtAuthGuard)
   async updatePortfolioImage(
     @Param('id') workerId: string,
     @Param('portfolioId') portfolioId: string,
     @Body() body: { description: string },
   ): Promise<{ id: string; imageUrl: string; description?: string }> {
-    return this.workersService.updatePortfolioImage(workerId, portfolioId, body.description);
+    return this.workersService.updatePortfolioImage(
+      workerId,
+      portfolioId,
+      body.description,
+    );
   }
 }

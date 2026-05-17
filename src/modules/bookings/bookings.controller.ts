@@ -1,31 +1,92 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { BookingsService } from './bookings.service';
-import { CreateBookingDto, CreatePriceProposalDto, UpdateBookingStatusDto } from './dto';
+import {
+  CreateBookingDto,
+  CreatePriceProposalDto,
+  UpdateBookingStatusDto,
+} from './dto';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { UserRole } from '@prisma/client';
 
 @Controller('bookings')
+@UseGuards(JwtAuthGuard) // All booking endpoints require authentication
 export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
 
   /**
    * POST /bookings
-   * Create a new booking
+   * Create a new booking (customers only)
    */
   @Post()
-  async createBooking(@Body() createBookingDto: CreateBookingDto) {
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.CUSTOMER)
+  async createBooking(
+    @CurrentUser('sub') userId: string,
+    @Body() createBookingDto: CreateBookingDto,
+  ) {
+    // Override customerId with authenticated user's ID
+    createBookingDto.customerId = userId;
     return this.bookingsService.createBooking(createBookingDto);
   }
 
   /**
    * GET /bookings
-   * Get all bookings (paginated)
+   * Get all bookings — admin only
    */
   @Get()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
   async getAllBookings(
     @Query('skip') skip: string = '0',
     @Query('take') take: string = '20',
     @Query('status') status?: string,
   ) {
-    return this.bookingsService.getAllBookings(parseInt(skip), parseInt(take), status);
+    return this.bookingsService.getAllBookings(
+      parseInt(skip),
+      parseInt(take),
+      status,
+    );
+  }
+
+  /**
+   * GET /bookings/my
+   * Get current user's bookings (customer or worker)
+   */
+  @Get('my')
+  async getMyBookings(
+    @CurrentUser() user: { sub: string; role: UserRole },
+    @Query('skip') skip: string = '0',
+    @Query('take') take: string = '20',
+    @Query('status') status?: string,
+  ) {
+    if (user.role === UserRole.CUSTOMER) {
+      return this.bookingsService.getCustomerBookings(
+        user.sub,
+        parseInt(skip),
+        parseInt(take),
+        status,
+      );
+    } else {
+      // For workers, we need the worker profile ID, not user ID
+      return this.bookingsService.getWorkerBookingsByUserId(
+        user.sub,
+        parseInt(skip),
+        parseInt(take),
+        status,
+      );
+    }
   }
 
   /**
@@ -39,7 +100,12 @@ export class BookingsController {
     @Query('take') take: string = '20',
     @Query('status') status?: string,
   ) {
-    return this.bookingsService.getCustomerBookings(customerId, parseInt(skip), parseInt(take), status);
+    return this.bookingsService.getCustomerBookings(
+      customerId,
+      parseInt(skip),
+      parseInt(take),
+      status,
+    );
   }
 
   /**
@@ -53,7 +119,12 @@ export class BookingsController {
     @Query('take') take: string = '20',
     @Query('status') status?: string,
   ) {
-    return this.bookingsService.getWorkerBookings(workerId, parseInt(skip), parseInt(take), status);
+    return this.bookingsService.getWorkerBookings(
+      workerId,
+      parseInt(skip),
+      parseInt(take),
+      status,
+    );
   }
 
   /**
@@ -93,9 +164,15 @@ export class BookingsController {
   @Post(':id/proposals')
   async createPriceProposal(
     @Param('id') bookingId: string,
+    @CurrentUser('sub') userId: string,
     @Body() createPriceProposalDto: CreatePriceProposalDto,
   ) {
-    return this.bookingsService.createPriceProposal(bookingId, createPriceProposalDto);
+    // Override proposedBy with authenticated user's ID
+    createPriceProposalDto.proposedBy = userId;
+    return this.bookingsService.createPriceProposal(
+      bookingId,
+      createPriceProposalDto,
+    );
   }
 
   /**

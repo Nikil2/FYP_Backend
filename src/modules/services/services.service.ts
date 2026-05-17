@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { ServiceResponseDto } from './dto/service-response.dto';
@@ -10,8 +14,11 @@ export class ServicesService {
   /**
    * Create a new service
    */
-  async createService(createServiceDto: CreateServiceDto): Promise<ServiceResponseDto> {
-    const { name, iconUrl, categoryId, categoryName, categoryIcon } = createServiceDto;
+  async createService(
+    createServiceDto: CreateServiceDto,
+  ): Promise<ServiceResponseDto> {
+    const { name, iconUrl, categoryId, categoryName, categoryIcon } =
+      createServiceDto;
 
     // Check if service already exists
     const existingService = await this.prisma.service.findUnique({
@@ -98,7 +105,10 @@ export class ServicesService {
   /**
    * Update service
    */
-  async updateService(id: number, updateData: Partial<CreateServiceDto>): Promise<ServiceResponseDto> {
+  async updateService(
+    id: number,
+    updateData: Partial<CreateServiceDto>,
+  ): Promise<ServiceResponseDto> {
     const service = await this.prisma.service.findUnique({
       where: { id },
     });

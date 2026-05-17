@@ -1,4 +1,9 @@
-import { Injectable, ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -24,8 +29,11 @@ export class UsersService {
    * Register a new user
    * Returns user data with JWT token
    */
-  async register(createUserDto: CreateUserDto): Promise<{ user: UserResponseDto; token: string }> {
-    const { phoneNumber, password, fullName, profilePicUrl, fcmToken, role } = createUserDto;
+  async register(
+    createUserDto: CreateUserDto,
+  ): Promise<{ user: UserResponseDto; token: string }> {
+    const { phoneNumber, password, fullName, profilePicUrl, fcmToken, role } =
+      createUserDto;
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -33,7 +41,9 @@ export class UsersService {
     });
 
     if (existingUser) {
-      throw new ConflictException(`User with phone number ${phoneNumber} already exists`);
+      throw new ConflictException(
+        `User with phone number ${phoneNumber} already exists`,
+      );
     }
 
     // Hash password (Salt rounds: 10)
@@ -64,7 +74,9 @@ export class UsersService {
    * Login user with phone and password
    * Returns user data with JWT token
    */
-  async login(loginDto: LoginDto): Promise<{ user: UserResponseDto; token: string }> {
+  async login(
+    loginDto: LoginDto,
+  ): Promise<{ user: UserResponseDto; token: string }> {
     const { phoneNumber, password } = loginDto;
 
     // Find user by phone (include password for verification)
@@ -130,7 +142,9 @@ export class UsersService {
     });
 
     if (!user) {
-      throw new NotFoundException(`User with phone number ${phoneNumber} not found`);
+      throw new NotFoundException(
+        `User with phone number ${phoneNumber} not found`,
+      );
     }
 
     return this.mapToResponseDto(user);
@@ -139,7 +153,10 @@ export class UsersService {
   /**
    * Get all users (paginated)
    */
-  async getAllUsers(limit: number = 10, offset: number = 0): Promise<{ data: UserResponseDto[]; total: number }> {
+  async getAllUsers(
+    limit: number = 10,
+    offset: number = 0,
+  ): Promise<{ data: UserResponseDto[]; total: number }> {
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         take: limit,
@@ -158,7 +175,10 @@ export class UsersService {
   /**
    * Update user profile
    */
-  async updateUser(userId: string, updateData: Partial<CreateUserDto>): Promise<UserResponseDto> {
+  async updateUser(
+    userId: string,
+    updateData: Partial<CreateUserDto>,
+  ): Promise<UserResponseDto> {
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: updateData,
@@ -182,7 +202,10 @@ export class UsersService {
   /**
    * Block/Unblock user
    */
-  async toggleUserBlock(userId: string, isBlocked: boolean): Promise<UserResponseDto> {
+  async toggleUserBlock(
+    userId: string,
+    isBlocked: boolean,
+  ): Promise<UserResponseDto> {
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: { isBlocked },
@@ -220,7 +243,10 @@ export class UsersService {
   /**
    * Verify password (for login)
    */
-  async verifyPassword(plainPassword: string, hashedPassword: string): Promise<boolean> {
+  async verifyPassword(
+    plainPassword: string,
+    hashedPassword: string,
+  ): Promise<boolean> {
     return bcrypt.compare(plainPassword, hashedPassword);
   }
 

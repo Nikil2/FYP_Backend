@@ -22,19 +22,21 @@ export async function uploadToCloudinary(
   folder: string = 'mehnati-marketplace',
 ): Promise<UploadApiResponse> {
   return new Promise((resolve, reject) => {
-    cloudinary.uploader.upload_stream(
-      {
-        folder,
-        resource_type: 'image',
-      },
-      (error, result) => {
-        if (error || !result) {
-          reject(error || new Error('Upload failed'));
-        } else {
-          resolve(result as UploadApiResponse);
-        }
-      },
-    ).end(file.buffer);
+    cloudinary.uploader
+      .upload_stream(
+        {
+          folder,
+          resource_type: 'image',
+        },
+        (error, result) => {
+          if (error || !result) {
+            reject(error || new Error('Upload failed'));
+          } else {
+            resolve(result as UploadApiResponse);
+          }
+        },
+      )
+      .end(file.buffer);
   });
 }
 

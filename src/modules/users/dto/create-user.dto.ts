@@ -1,4 +1,11 @@
-import { IsPhoneNumber, IsString, IsNotEmpty, IsOptional, IsEnum, MinLength } from 'class-validator';
+import {
+  IsPhoneNumber,
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  MinLength,
+} from 'class-validator';
 import { UserRole } from '@prisma/client';
 
 export class CreateUserDto {

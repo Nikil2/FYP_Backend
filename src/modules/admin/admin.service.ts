@@ -4,18 +4,30 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { AdminResponseDto, DashboardResponseDto, WorkerQualityDto, DashboardActivityDto } from './dto';
+import {
+  AdminResponseDto,
+  DashboardResponseDto,
+  WorkerQualityDto,
+  DashboardActivityDto,
+} from './dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+  ) {}
 
   /**
    * Validate admin credentials and return admin profile
    */
-  async validateAdminCredentials(username: string, password: string): Promise<AdminResponseDto> {
+  async validateAdminCredentials(
+    username: string,
+    password: string,
+  ): Promise<{ admin: AdminResponseDto; accessToken: string }> {
     // Find user by phone number (username is stored as phoneNumber)
     const user = await this.prisma.user.findFirst({
       where: {
@@ -38,7 +50,18 @@ export class AdminService {
       throw new UnauthorizedException('Invalid admin credentials');
     }
 
-    return this.mapAdminResponse(user);
+    // Generate JWT token with ADMIN role
+    const payload = {
+      sub: user.id,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+    };
+    const accessToken = this.jwtService.sign(payload);
+
+    return {
+      admin: this.mapAdminResponse(user),
+      accessToken,
+    };
   }
 
   /**
@@ -63,8 +86,12 @@ export class AdminService {
     ] = await Promise.all([
       this.prisma.user.count({ where: { role: { not: 'ADMIN' } } }),
       this.prisma.workerProfile.count(),
-      this.prisma.workerProfile.count({ where: { verificationStatus: 'APPROVED' } }),
-      this.prisma.workerProfile.count({ where: { verificationStatus: 'PENDING' } }),
+      this.prisma.workerProfile.count({
+        where: { verificationStatus: 'APPROVED' },
+      }),
+      this.prisma.workerProfile.count({
+        where: { verificationStatus: 'PENDING' },
+      }),
       this.prisma.workerProfile.count({ where: { user: { isBlocked: true } } }),
       this.prisma.workerProfile.count({ where: { isOnline: true } }),
       this.prisma.booking.count(),
@@ -299,24 +326,55 @@ export class AdminService {
       this.prisma.workerProfile.count({ where }),
     ]);
 
+    const workerIds = workers.map((w: any) => w.id);
+    const userIds = workers.map((w: any) => w.userId);
+    const portfolioLookupIds = [...new Set([...workerIds, ...userIds])];
+
+    const portfolioRows = portfolioLookupIds.length
+      ? await this.prisma.workerPortfolio.findMany({
+          where: { workerId: { in: portfolioLookupIds } },
+          select: { id: true, workerId: true, imageUrl: true, description: true },
+        })
+      : [];
+
+    const portfolioByWorkerId = portfolioRows.reduce(
+      (acc, row) => {
+        if (!acc[row.workerId]) acc[row.workerId] = [];
+        acc[row.workerId].push({ id: row.id, imageUrl: row.imageUrl, description: row.description });
+        return acc;
+      },
+      {} as Record<string, Array<{ id: string; imageUrl: string; description: string | null }>>,
+    );
+
     return {
-      data: workers.map((worker: any) => ({
-        id: worker.id,
-        userId: worker.userId,
-        cnicNumber: worker.cnicNumber,
-        cnicFrontUrl: worker.cnicFrontUrl,
-        cnicBackUrl: worker.cnicBackUrl,
-        bio: worker.bio,
-        experienceYears: worker.experienceYears,
-        visitingCharges: Number(worker.visitingCharges),
-        homeAddress: worker.homeAddress,
-        verificationStatus: worker.verificationStatus,
-        averageRating: Number(worker.averageRating),
-        totalJobsCompleted: worker.totalJobsCompleted,
-        isOnline: worker.isOnline,
-        user: worker.user,
-        services: worker.services.map((s: any) => s.service),
-      })),
+      data: workers.map((worker: any) => {
+        const byWorkerId = portfolioByWorkerId[worker.id] || [];
+        const byUserId = portfolioByWorkerId[worker.userId] || [];
+        const merged = [...byWorkerId, ...byUserId];
+        const portfolio = merged.filter(
+          (item, index, arr) => arr.findIndex((e) => e.id === item.id) === index,
+        );
+
+        return {
+          id: worker.id,
+          userId: worker.userId,
+          cnicNumber: worker.cnicNumber,
+          cnicFrontUrl: worker.cnicFrontUrl,
+          cnicBackUrl: worker.cnicBackUrl,
+          selfieImageUrl: worker.selfieImageUrl,
+          bio: worker.bio,
+          experienceYears: worker.experienceYears,
+          visitingCharges: Number(worker.visitingCharges),
+          homeAddress: worker.homeAddress,
+          verificationStatus: worker.verificationStatus,
+          averageRating: Number(worker.averageRating),
+          totalJobsCompleted: worker.totalJobsCompleted,
+          isOnline: worker.isOnline,
+          user: worker.user,
+          services: worker.services.map((s: any) => s.service),
+          portfolio,
+        };
+      }),
       meta: {
         total,
         page,
@@ -380,7 +438,10 @@ export class AdminService {
         });
         return acc;
       },
-      {} as Record<string, Array<{ id: string; imageUrl: string; description: string | null }>>,
+      {} as Record<
+        string,
+        Array<{ id: string; imageUrl: string; description: string | null }>
+      >,
     );
 
     return workers.map((worker: any) => ({
@@ -408,7 +469,8 @@ export class AdminService {
 
         // Deduplicate in case both keys point to same rows.
         return merged.filter(
-          (item, index, arr) => arr.findIndex((entry) => entry.id === item.id) === index,
+          (item, index, arr) =>
+            arr.findIndex((entry) => entry.id === item.id) === index,
         );
       })(),
       submittedAt: worker.user?.createdAt || new Date(),
@@ -418,7 +480,10 @@ export class AdminService {
   /**
    * Approve worker verification
    */
-  async approveWorkerVerification(workerId: string, reviewedBy: string): Promise<any> {
+  async approveWorkerVerification(
+    workerId: string,
+    reviewedBy: string,
+  ): Promise<any> {
     const worker = await this.prisma.workerProfile.update({
       where: { id: workerId },
       data: {
@@ -648,7 +713,11 @@ export class AdminService {
         { customer: { fullName: { contains: search, mode: 'insensitive' } } },
         { customer: { phoneNumber: { contains: search } } },
         { worker: { id: { contains: search, mode: 'insensitive' } } },
-        { worker: { user: { fullName: { contains: search, mode: 'insensitive' } } } },
+        {
+          worker: {
+            user: { fullName: { contains: search, mode: 'insensitive' } },
+          },
+        },
         { worker: { user: { phoneNumber: { contains: search } } } },
         { service: { name: { contains: search, mode: 'insensitive' } } },
       ];
@@ -1129,11 +1198,7 @@ export class AdminService {
     currentMonth.setDate(1);
     currentMonth.setHours(0, 0, 0, 0);
 
-    const [
-      grossRevenue,
-      refunds,
-      monthlyBookings,
-    ] = await Promise.all([
+    const [grossRevenue, refunds, monthlyBookings] = await Promise.all([
       this.prisma.booking.aggregate({
         _sum: { finalPrice: true },
         where: {
@@ -1210,8 +1275,10 @@ export class AdminService {
       }),
     ]);
 
-    const completionRate = totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 0;
-    const disputeRate = totalBookings > 0 ? (disputedBookings / totalBookings) * 100 : 0;
+    const completionRate =
+      totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 0;
+    const disputeRate =
+      totalBookings > 0 ? (disputedBookings / totalBookings) * 100 : 0;
 
     // Get service names for demand
     const serviceIds = serviceDemand.map((s) => s.serviceId);
@@ -1221,7 +1288,8 @@ export class AdminService {
 
     const serviceDemandWithNames = serviceDemand.map((s) => ({
       serviceId: s.serviceId,
-      serviceName: services.find((srv) => srv.id === s.serviceId)?.name || 'Unknown',
+      serviceName:
+        services.find((srv) => srv.id === s.serviceId)?.name || 'Unknown',
       count: s._count,
     }));
 
@@ -1290,7 +1358,9 @@ export class AdminService {
       })),
     ];
 
-    return activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()).slice(0, 10);
+    return activities
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 10);
   }
 
   private async getWorkerQualitySnapshot(): Promise<WorkerQualityDto[]> {
