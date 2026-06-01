@@ -49,8 +49,15 @@ export class WorkersController {
   async getAllWorkers(
     @Query('skip') skip: string = '0',
     @Query('take') take: string = '10',
+    @Query('serviceId') serviceId?: string,
+    @Query('categoryId') categoryId?: string,
   ): Promise<WorkerResponseDto[]> {
-    return this.workersService.getAllWorkers(parseInt(skip), parseInt(take));
+    return this.workersService.getAllWorkers(
+      parseInt(skip),
+      parseInt(take),
+      serviceId ? parseInt(serviceId) : undefined,
+      categoryId,
+    );
   }
 
   /**
@@ -61,10 +68,14 @@ export class WorkersController {
   async getVerifiedWorkers(
     @Query('skip') skip: string = '0',
     @Query('take') take: string = '10',
+    @Query('serviceId') serviceId?: string,
+    @Query('categoryId') categoryId?: string,
   ): Promise<WorkerResponseDto[]> {
     return this.workersService.getVerifiedWorkers(
       parseInt(skip),
       parseInt(take),
+      serviceId ? parseInt(serviceId) : undefined,
+      categoryId,
     );
   }
 

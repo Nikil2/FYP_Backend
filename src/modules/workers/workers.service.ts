@@ -285,8 +285,28 @@ export class WorkersService {
   async getAllWorkers(
     skip: number = 0,
     take: number = 10,
+    serviceId?: number,
+    categoryId?: string,
   ): Promise<WorkerResponseDto[]> {
+    const where: any = {};
+    if (serviceId) {
+      where.services = {
+        some: {
+          serviceId,
+        },
+      };
+    } else if (categoryId) {
+      where.services = {
+        some: {
+          service: {
+            categoryId,
+          },
+        },
+      };
+    }
+
     const workers = await this.prisma.workerProfile.findMany({
+      where,
       include: {
         user: true,
         services: { include: { service: true } },
@@ -305,9 +325,31 @@ export class WorkersService {
   async getVerifiedWorkers(
     skip: number = 0,
     take: number = 10,
+    serviceId?: number,
+    categoryId?: string,
   ): Promise<WorkerResponseDto[]> {
+    const where: any = {
+      verificationStatus: VerificationStatus.APPROVED,
+    };
+
+    if (serviceId) {
+      where.services = {
+        some: {
+          serviceId,
+        },
+      };
+    } else if (categoryId) {
+      where.services = {
+        some: {
+          service: {
+            categoryId,
+          },
+        },
+      };
+    }
+
     const workers = await this.prisma.workerProfile.findMany({
-      where: { verificationStatus: VerificationStatus.APPROVED },
+      where,
       include: {
         user: true,
         services: { include: { service: true } },
@@ -392,6 +434,8 @@ export class WorkersService {
       description: booking.description,
       status: booking.status,
       location: booking.jobAddress,
+      jobLat: booking.jobLat,
+      jobLng: booking.jobLng,
       scheduledAt: booking.scheduledAt,
       agreedPrice: booking.finalPrice ? Number(booking.finalPrice) : null,
       customer: {

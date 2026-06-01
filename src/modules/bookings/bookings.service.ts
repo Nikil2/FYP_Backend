@@ -10,10 +10,14 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateBookingDto, CreatePriceProposalDto } from './dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BookingsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private notificationsService: NotificationsService,
+  ) {}
 
   async createBooking(createBookingDto: CreateBookingDto) {
     const {
@@ -89,6 +93,13 @@ export class BookingsService {
 
       return created;
     });
+
+    await this.notificationsService.createNotification(
+      booking.worker.userId,
+      'New Booking Request',
+      `${booking.customer.fullName} requested ${booking.service.name}.`,
+      'BOOKING_REQUEST',
+    );
 
     return booking;
   }
@@ -228,7 +239,7 @@ export class BookingsService {
       throw new BadRequestException('Invalid booking status');
     }
 
-    return this.prisma.booking.update({
+    const updated = await this.prisma.booking.update({
       where: { id: bookingId },
       data: { status: nextStatus as BookingStatus },
       include: {
@@ -237,11 +248,33 @@ export class BookingsService {
         service: true,
       },
     });
+
+    const statusLabel = nextStatus.replace('_', ' ').toLowerCase();
+    await this.notificationsService.createNotification(
+      updated.customer.id,
+      'Booking Updated',
+      `Your booking for ${updated.service.name} is now ${statusLabel}.`,
+      'BOOKING_STATUS',
+    );
+
+    await this.notificationsService.createNotification(
+      updated.worker.user.id,
+      'Booking Status Updated',
+      `Booking for ${updated.service.name} is now ${statusLabel}.`,
+      'BOOKING_STATUS',
+    );
+
+    return updated;
   }
 
   async cancelBooking(bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
+      include: {
+        customer: true,
+        service: true,
+        worker: { select: { userId: true } },
+      },
     });
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${bookingId} not found`);
@@ -274,7 +307,7 @@ export class BookingsService {
       },
     });
 
-    return this.prisma.priceProposal.create({
+    const proposal = await this.prisma.priceProposal.create({
       data: {
         bookingId,
         proposedBy: dto.proposedBy,
@@ -282,11 +315,32 @@ export class BookingsService {
         status: ProposalStatus.PENDING,
       },
     });
+
+    const recipientId =
+      dto.proposedBy === booking.customerId
+        ? booking.worker.userId
+        : booking.customerId;
+
+    await this.notificationsService.createNotification(
+      recipientId,
+      'New Price Proposal',
+      `New proposal for ${booking.service.name}: Rs. ${dto.amount}.`,
+      'PRICE_PROPOSAL',
+    );
+
+    return proposal;
   }
 
   async acceptPriceProposal(bookingId: string, proposalId: string) {
     const [booking, proposal] = await Promise.all([
-      this.prisma.booking.findUnique({ where: { id: bookingId } }),
+      this.prisma.booking.findUnique({
+        where: { id: bookingId },
+        include: {
+          customer: true,
+          service: true,
+          worker: { select: { userId: true } },
+        },
+      }),
       this.prisma.priceProposal.findUnique({ where: { id: proposalId } }),
     ]);
 
@@ -317,6 +371,20 @@ export class BookingsService {
         },
       });
     });
+
+    await this.notificationsService.createNotification(
+      booking.customerId,
+      'Price Proposal Accepted',
+      `Proposal accepted for ${booking.service.name}.`,
+      'PRICE_PROPOSAL',
+    );
+
+    await this.notificationsService.createNotification(
+      booking.worker.userId,
+      'Price Proposal Accepted',
+      `Proposal accepted for ${booking.service.name}.`,
+      'PRICE_PROPOSAL',
+    );
 
     return this.getBookingById(bookingId);
   }

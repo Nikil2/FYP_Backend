@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { MessageType } from '@prisma/client';
 
@@ -13,6 +14,7 @@ export class MessagesService {
   constructor(
     private prisma: PrismaService,
     private realtimeGateway: RealtimeGateway,
+    private notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -62,6 +64,14 @@ export class MessagesService {
 
     // Emit to booking room via Socket.IO (real-time delivery)
     this.realtimeGateway.emitNewMessage(dto.bookingId, message);
+
+    const recipientId = isCustomer ? booking.worker.userId : booking.customerId;
+    await this.notificationsService.createNotification(
+      recipientId,
+      'New Message',
+      'You have a new message in your booking chat.',
+      'MESSAGE',
+    );
 
     return message;
   }
