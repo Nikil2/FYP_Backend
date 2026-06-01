@@ -434,6 +434,8 @@ export class WorkersService {
       description: booking.description,
       status: booking.status,
       location: booking.jobAddress,
+      jobLat: booking.jobLat,
+      jobLng: booking.jobLng,
       scheduledAt: booking.scheduledAt,
       agreedPrice: booking.finalPrice ? Number(booking.finalPrice) : null,
       customer: {
