@@ -30,6 +30,7 @@ export class BookingsService {
       jobLng,
       scheduledAt,
       initialPrice,
+      imageUrls,
     } = createBookingDto;
 
     if (jobLat < -90 || jobLat > 90 || jobLng < -180 || jobLng > 180) {
@@ -66,6 +67,7 @@ export class BookingsService {
           jobAddress,
           jobLat,
           jobLng,
+          imageUrls: imageUrls ?? [],
           scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
           status:
             initialPrice && initialPrice > 0
