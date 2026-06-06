@@ -38,7 +38,7 @@ export class WorkersService {
       experienceYears,
       visitingCharges,
       bio,
-      serviceIds,
+      services: serviceInputs,
       portfolioImages,
     } = createWorkerDto;
 
@@ -47,10 +47,12 @@ export class WorkersService {
       throw new BadRequestException('Invalid coordinates provided');
     }
 
-    // Validate serviceIds
-    if (!serviceIds || serviceIds.length === 0) {
+    // Validate services
+    if (!serviceInputs || serviceInputs.length === 0) {
       throw new BadRequestException('At least one service must be selected');
     }
+
+    const serviceIds = serviceInputs.map((s) => s.serviceId);
 
     // Check if user with phone already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -125,12 +127,13 @@ export class WorkersService {
           },
         });
 
-        // Create worker services links
-        for (const serviceId of serviceIds) {
+        // Create worker services links with price
+        for (const { serviceId, price } of serviceInputs) {
           await tx.workerService.create({
             data: {
               workerId: workerProfile.id,
               serviceId,
+              price: price.toString(),
             },
           });
         }
@@ -547,6 +550,7 @@ export class WorkersService {
           id: ws.service.id,
           name: ws.service.name,
           iconUrl: ws.service.iconUrl,
+          price: parseFloat(ws.price ?? 0),
         }))
       : [];
 
@@ -585,6 +589,56 @@ export class WorkersService {
       services,
       portfolio,
     };
+  }
+
+  /**
+   * Replace worker's services (add/remove/update prices)
+   */
+  async updateWorkerServices(
+    workerId: string,
+    services: { serviceId: number; price: number }[],
+  ) {
+    const workerProfile = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+    });
+
+    if (!workerProfile) {
+      throw new NotFoundException(`Worker with ID ${workerId} not found`);
+    }
+
+    if (!services || services.length === 0) {
+      throw new BadRequestException('At least one service must be selected');
+    }
+
+    const serviceIds = services.map((s) => s.serviceId);
+    const existing = await this.prisma.service.findMany({
+      where: { id: { in: serviceIds } },
+    });
+
+    if (existing.length !== serviceIds.length) {
+      throw new BadRequestException('Some services do not exist');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.workerService.deleteMany({ where: { workerId } });
+
+      for (const { serviceId, price } of services) {
+        await tx.workerService.create({
+          data: { workerId, serviceId, price: price.toString() },
+        });
+      }
+    });
+
+    const updated = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+      include: {
+        user: true,
+        services: { include: { service: true } },
+        portfolio: true,
+      },
+    });
+
+    return this.mapToResponseDto(updated!.user, updated);
   }
 
   /**

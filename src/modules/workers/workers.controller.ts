@@ -143,6 +143,19 @@ export class WorkersController {
   }
 
   /**
+   * Replace worker services (add/remove/update prices)
+   * PUT /workers/:id/services
+   */
+  @Put(':id/services')
+  @UseGuards(JwtAuthGuard)
+  async updateWorkerServices(
+    @Param('id') workerId: string,
+    @Body() body: { services: { serviceId: number; price: number }[] },
+  ) {
+    return this.workersService.updateWorkerServices(workerId, body.services);
+  }
+
+  /**
    * Update worker online status
    * PUT /workers/:id/online-status
    */
