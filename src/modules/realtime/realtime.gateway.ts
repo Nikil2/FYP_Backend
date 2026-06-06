@@ -107,8 +107,8 @@ export class RealtimeGateway
       this.logger.log(
         `✅ User ${user.fullName} (${userId}) connected — socket ${client.id}`,
       );
-    } catch (error) {
-      this.logger.warn(`Client ${client.id} — auth failed: ${error.message}`);
+    } catch (error: any) {
+      this.logger.warn(`Client ${client.id} — auth failed: ${error?.message}`);
       client.disconnect();
     }
   }
@@ -216,8 +216,10 @@ export class RealtimeGateway
       },
     });
 
-    // Broadcast to the full booking room (including sender)
-    this.server.to(`booking:${data.bookingId}`).emit('new_message', message);
+    // Send back to the sender directly (guaranteed delivery regardless of room join timing)
+    client.emit('new_message', message);
+    // Broadcast to all others in the room (worker / customer)
+    client.to(`booking:${data.bookingId}`).emit('new_message', message);
   }
 
   /**
