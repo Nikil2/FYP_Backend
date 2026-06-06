@@ -295,6 +295,10 @@ export class BookingsService {
   async createPriceProposal(bookingId: string, dto: CreatePriceProposalDto) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
+      include: {
+        service: true,
+        worker: { select: { userId: true } },
+      },
     });
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${bookingId} not found`);
