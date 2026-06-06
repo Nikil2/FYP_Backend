@@ -220,6 +220,24 @@ export class RealtimeGateway
     client.emit('new_message', message);
     // Broadcast to all others in the room (worker / customer)
     client.to(`booking:${data.bookingId}`).emit('new_message', message);
+
+    // Notify the recipient
+    const recipientId = isCustomer ? booking.worker.userId : booking.customerId;
+    const senderName = client.data.fullName || 'Someone';
+    const preview = data.content.trim().slice(0, 80);
+    try {
+      const notification = await this.prisma.notification.create({
+        data: {
+          userId: recipientId,
+          title: `New message from ${senderName}`,
+          body: preview,
+          isRead: false,
+        },
+      });
+      this.emitNotification(recipientId, notification);
+    } catch (error: any) {
+      this.logger.warn(`Failed to create chat notification: ${error?.message}`);
+    }
   }
 
   /**
