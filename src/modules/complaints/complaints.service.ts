@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   CreateComplaintDto,
   ResolveComplaintDto,
@@ -17,6 +18,7 @@ export class ComplaintsService {
   constructor(
     private prisma: PrismaService,
     private realtimeGateway: RealtimeGateway,
+    private notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -91,12 +93,12 @@ export class ComplaintsService {
     const otherPartyUserId = isCustomer
       ? booking.worker.userId
       : booking.customerId;
-    this.realtimeGateway.emitNotification(otherPartyUserId, {
-      type: 'COMPLAINT_FILED',
-      title: 'Complaint Filed',
-      body: 'A complaint has been filed for your booking',
-      data: { bookingId: dto.bookingId, complaintId: complaint.id },
-    });
+    await this.notificationsService.createNotification(
+      otherPartyUserId,
+      'Complaint Filed',
+      'A complaint has been filed for your booking',
+      'COMPLAINT_FILED',
+    );
 
     // Notify booking room about status change
     this.realtimeGateway.emitBookingStatusUpdate(dto.bookingId, {
@@ -261,19 +263,20 @@ export class ComplaintsService {
     });
 
     // Notify both parties in real-time
-    this.realtimeGateway.emitNotification(resolved.booking.customerId, {
-      type: 'COMPLAINT_RESOLVED',
-      title: 'Complaint Resolved',
-      body: dto.resolution,
-      data: { complaintId, bookingId: resolved.bookingId },
-    });
-
-    this.realtimeGateway.emitNotification(resolved.booking.worker.userId, {
-      type: 'COMPLAINT_RESOLVED',
-      title: 'Complaint Resolved',
-      body: 'A complaint on your booking has been resolved',
-      data: { complaintId, bookingId: resolved.bookingId },
-    });
+    await Promise.all([
+      this.notificationsService.createNotification(
+        resolved.booking.customerId,
+        'Complaint Resolved',
+        dto.resolution,
+        'COMPLAINT_RESOLVED',
+      ),
+      this.notificationsService.createNotification(
+        resolved.booking.worker.userId,
+        'Complaint Resolved',
+        'A complaint on your booking has been resolved',
+        'COMPLAINT_RESOLVED',
+      ),
+    ]);
 
     return resolved;
   }
