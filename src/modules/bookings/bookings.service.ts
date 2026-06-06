@@ -37,13 +37,16 @@ export class BookingsService {
       throw new BadRequestException('Invalid coordinates provided');
     }
 
-    const [customer, worker, service] = await Promise.all([
+    const [customer, worker, service, workerService] = await Promise.all([
       this.prisma.user.findUnique({ where: { id: customerId } }),
       this.prisma.workerProfile.findUnique({
         where: { id: workerId },
         include: { user: true },
       }),
       this.prisma.service.findUnique({ where: { id: serviceId } }),
+      this.prisma.workerService.findUnique({
+        where: { workerId_serviceId: { workerId, serviceId } },
+      }),
     ]);
 
     if (!customer)
@@ -56,6 +59,14 @@ export class BookingsService {
     if (worker.verificationStatus !== VerificationStatus.APPROVED) {
       throw new BadRequestException('Worker is not verified yet');
     }
+
+    // Use provided initialPrice, or fall back to worker's set service price
+    const effectivePrice =
+      initialPrice && initialPrice > 0
+        ? initialPrice
+        : workerService?.price
+        ? parseFloat(workerService.price.toString())
+        : null;
 
     const booking = await this.prisma.$transaction(async (tx) => {
       const created = await tx.booking.create({
@@ -70,10 +81,9 @@ export class BookingsService {
           imageUrls: imageUrls ?? [],
           scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
           status:
-            initialPrice && initialPrice > 0
+            effectivePrice && effectivePrice > 0
               ? BookingStatus.NEGOTIATION
               : BookingStatus.PENDING,
-          finalPrice: initialPrice ? initialPrice.toString() : null,
         },
         include: {
           customer: true,
@@ -82,12 +92,12 @@ export class BookingsService {
         },
       });
 
-      if (initialPrice && initialPrice > 0) {
+      if (effectivePrice && effectivePrice > 0) {
         await tx.priceProposal.create({
           data: {
             bookingId: created.id,
             proposedBy: customerId,
-            amount: initialPrice.toString(),
+            amount: effectivePrice.toString(),
             status: ProposalStatus.PENDING,
           },
         });

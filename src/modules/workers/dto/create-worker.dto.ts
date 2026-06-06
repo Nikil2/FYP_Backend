@@ -10,8 +10,20 @@ import {
   IsArray,
   MinLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export class WorkerServiceInputDto {
+  @IsNumber()
+  @Type(() => Number)
+  serviceId: number;
+
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  price: number;
+}
 
 export class CreateWorkerDto {
   // ============================================
@@ -98,8 +110,9 @@ export class CreateWorkerDto {
   // ============================================
   @IsArray()
   @IsNotEmpty()
-  @Type(() => Number)
-  serviceIds: number[]; // IDs of services worker offers
+  @ValidateNested({ each: true })
+  @Type(() => WorkerServiceInputDto)
+  services: WorkerServiceInputDto[];
 
   // ============================================
   // Portfolio Images (Optional)
