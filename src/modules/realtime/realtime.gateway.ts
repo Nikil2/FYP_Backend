@@ -11,6 +11,7 @@ import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { MessageType } from '@prisma/client';
 
 /**
  * Shared WebSocket Gateway
@@ -106,8 +107,8 @@ export class RealtimeGateway
       this.logger.log(
         `✅ User ${user.fullName} (${userId}) connected — socket ${client.id}`,
       );
-    } catch (error) {
-      this.logger.warn(`Client ${client.id} — auth failed: ${error.message}`);
+    } catch (error: any) {
+      this.logger.warn(`Client ${client.id} — auth failed: ${error?.message}`);
       client.disconnect();
     }
   }
@@ -174,6 +175,68 @@ export class RealtimeGateway
   ) {
     if (data.bookingId) {
       client.leave(`booking:${data.bookingId}`);
+    }
+  }
+
+  /**
+   * Send a chat message via WebSocket.
+   * Client emits: 'send_message' { bookingId: string, content: string }
+   * Server saves to DB, emits 'new_message' to the booking room, sends notification.
+   */
+  @SubscribeMessage('send_message')
+  async handleSendMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { bookingId: string; content: string },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.bookingId || !data.content?.trim()) return;
+
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: data.bookingId },
+      include: { worker: { select: { userId: true } } },
+    });
+
+    if (!booking) return;
+
+    const isCustomer = booking.customerId === userId;
+    const isWorker = booking.worker.userId === userId;
+    if (!isCustomer && !isWorker) return;
+
+    const message = await this.prisma.message.create({
+      data: {
+        bookingId: data.bookingId,
+        senderId: userId,
+        content: data.content.trim(),
+        type: MessageType.TEXT,
+      },
+      include: {
+        sender: {
+          select: { id: true, fullName: true, profilePicUrl: true, role: true },
+        },
+      },
+    });
+
+    // Send back to the sender directly (guaranteed delivery regardless of room join timing)
+    client.emit('new_message', message);
+    // Broadcast to all others in the room (worker / customer)
+    client.to(`booking:${data.bookingId}`).emit('new_message', message);
+
+    // Notify the recipient
+    const recipientId = isCustomer ? booking.worker.userId : booking.customerId;
+    const senderName = client.data.fullName || 'Someone';
+    const preview = data.content.trim().slice(0, 80);
+    try {
+      const notification = await this.prisma.notification.create({
+        data: {
+          userId: recipientId,
+          title: `New message from ${senderName}`,
+          body: preview,
+          isRead: false,
+        },
+      });
+      this.emitNotification(recipientId, notification);
+    } catch (error: any) {
+      this.logger.warn(`Failed to create chat notification: ${error?.message}`);
     }
   }
 

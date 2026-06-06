@@ -30,6 +30,7 @@ export class BookingsService {
       jobLng,
       scheduledAt,
       initialPrice,
+      imageUrls,
     } = createBookingDto;
 
     if (jobLat < -90 || jobLat > 90 || jobLng < -180 || jobLng > 180) {
@@ -66,6 +67,7 @@ export class BookingsService {
           jobAddress,
           jobLat,
           jobLng,
+          imageUrls: imageUrls ?? [],
           scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
           status:
             initialPrice && initialPrice > 0
@@ -118,6 +120,7 @@ export class BookingsService {
           include: { sender: true },
           orderBy: { createdAt: 'asc' },
         },
+        feedback: true,
       },
     });
 
@@ -295,6 +298,10 @@ export class BookingsService {
   async createPriceProposal(bookingId: string, dto: CreatePriceProposalDto) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
+      include: {
+        service: true,
+        worker: { select: { userId: true } },
+      },
     });
     if (!booking) {
       throw new NotFoundException(`Booking with ID ${bookingId} not found`);

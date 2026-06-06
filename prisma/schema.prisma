@@ -102,6 +102,7 @@ model Booking {
   jobAddress  String
   jobLat      Float
   jobLng      Float
+  imageUrls   String[]
   status      BookingStatus   @default(PENDING)
   finalPrice  Decimal?        @db.Decimal(10, 2)
   scheduledAt DateTime?

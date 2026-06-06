@@ -438,6 +438,7 @@ export class WorkersService {
       jobLng: booking.jobLng,
       scheduledAt: booking.scheduledAt,
       agreedPrice: booking.finalPrice ? Number(booking.finalPrice) : null,
+      imageUrls: booking.imageUrls ?? [],
       customer: {
         id: booking.customer.id,
         fullName: booking.customer.fullName,

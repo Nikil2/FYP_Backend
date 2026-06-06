@@ -6,7 +6,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
-import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { BookingStatus } from '@prisma/client';
 
@@ -14,7 +14,7 @@ import { BookingStatus } from '@prisma/client';
 export class FeedbackService {
   constructor(
     private prisma: PrismaService,
-    private realtimeGateway: RealtimeGateway,
+    private notificationsService: NotificationsService,
   ) {}
 
   /**
@@ -106,13 +106,13 @@ export class FeedbackService {
       return created;
     });
 
-    // Notify the worker about the new review in real-time
-    this.realtimeGateway.emitNotification(booking.worker.userId, {
-      type: 'NEW_REVIEW',
-      title: 'New Review',
-      body: `You received a ${dto.rating}-star review`,
-      data: { bookingId: dto.bookingId, rating: dto.rating },
-    });
+    // Notify the worker about the new review (saved to DB + pushed via socket)
+    await this.notificationsService.createNotification(
+      booking.worker.userId,
+      'New Review',
+      `You received a ${dto.rating}-star review`,
+      'NEW_REVIEW',
+    );
 
     return feedback;
   }

@@ -5,6 +5,8 @@ import {
   IsOptional,
   IsDateString,
   IsUUID,
+  IsArray,
+  IsUrl,
   MinLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -47,4 +49,9 @@ export class CreateBookingDto {
   @IsNumber()
   @Type(() => Number)
   initialPrice?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsUrl({}, { each: true })
+  imageUrls?: string[];
 }
