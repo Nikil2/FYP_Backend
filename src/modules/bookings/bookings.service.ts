@@ -120,6 +120,7 @@ export class BookingsService {
           include: { sender: true },
           orderBy: { createdAt: 'asc' },
         },
+        feedback: true,
       },
     });
 
