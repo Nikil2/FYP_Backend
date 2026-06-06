@@ -592,6 +592,56 @@ export class WorkersService {
   }
 
   /**
+   * Replace worker's services (add/remove/update prices)
+   */
+  async updateWorkerServices(
+    workerId: string,
+    services: { serviceId: number; price: number }[],
+  ) {
+    const workerProfile = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+    });
+
+    if (!workerProfile) {
+      throw new NotFoundException(`Worker with ID ${workerId} not found`);
+    }
+
+    if (!services || services.length === 0) {
+      throw new BadRequestException('At least one service must be selected');
+    }
+
+    const serviceIds = services.map((s) => s.serviceId);
+    const existing = await this.prisma.service.findMany({
+      where: { id: { in: serviceIds } },
+    });
+
+    if (existing.length !== serviceIds.length) {
+      throw new BadRequestException('Some services do not exist');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.workerService.deleteMany({ where: { workerId } });
+
+      for (const { serviceId, price } of services) {
+        await tx.workerService.create({
+          data: { workerId, serviceId, price: price.toString() },
+        });
+      }
+    });
+
+    const updated = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+      include: {
+        user: true,
+        services: { include: { service: true } },
+        portfolio: true,
+      },
+    });
+
+    return this.mapToResponseDto(updated!.user, updated);
+  }
+
+  /**
    * Add portfolio image to worker
    */
   async addPortfolioImage(
