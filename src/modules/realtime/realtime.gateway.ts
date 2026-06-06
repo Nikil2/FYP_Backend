@@ -11,6 +11,7 @@ import { Server, Socket } from 'socket.io';
 import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { MessageType } from '@prisma/client';
 
 /**
  * Shared WebSocket Gateway
@@ -175,6 +176,48 @@ export class RealtimeGateway
     if (data.bookingId) {
       client.leave(`booking:${data.bookingId}`);
     }
+  }
+
+  /**
+   * Send a chat message via WebSocket.
+   * Client emits: 'send_message' { bookingId: string, content: string }
+   * Server saves to DB, emits 'new_message' to the booking room, sends notification.
+   */
+  @SubscribeMessage('send_message')
+  async handleSendMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { bookingId: string; content: string },
+  ) {
+    const userId = client.data.userId;
+    if (!userId || !data.bookingId || !data.content?.trim()) return;
+
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: data.bookingId },
+      include: { worker: { select: { userId: true } } },
+    });
+
+    if (!booking) return;
+
+    const isCustomer = booking.customerId === userId;
+    const isWorker = booking.worker.userId === userId;
+    if (!isCustomer && !isWorker) return;
+
+    const message = await this.prisma.message.create({
+      data: {
+        bookingId: data.bookingId,
+        senderId: userId,
+        content: data.content.trim(),
+        type: MessageType.TEXT,
+      },
+      include: {
+        sender: {
+          select: { id: true, fullName: true, profilePicUrl: true, role: true },
+        },
+      },
+    });
+
+    // Broadcast to the full booking room (including sender)
+    this.server.to(`booking:${data.bookingId}`).emit('new_message', message);
   }
 
   /**
