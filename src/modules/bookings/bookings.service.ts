@@ -305,6 +305,13 @@ export class BookingsService {
     return this.updateBookingStatus(bookingId, BookingStatus.CANCELLED);
   }
 
+  async getProposals(bookingId: string) {
+    return this.prisma.priceProposal.findMany({
+      where: { bookingId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async createPriceProposal(bookingId: string, dto: CreatePriceProposalDto) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
