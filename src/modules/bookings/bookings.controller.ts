@@ -158,6 +158,15 @@ export class BookingsController {
   }
 
   /**
+   * GET /bookings/:id/proposals
+   * List all price proposals for a booking
+   */
+  @Get(':id/proposals')
+  async getProposals(@Param('id') bookingId: string) {
+    return this.bookingsService.getProposals(bookingId);
+  }
+
+  /**
    * POST /bookings/:id/proposals
    * Create new price proposal for booking
    */

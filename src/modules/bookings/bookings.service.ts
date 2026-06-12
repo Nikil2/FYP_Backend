@@ -121,15 +121,9 @@ export class BookingsService {
       where: { id: bookingId },
       include: {
         customer: true,
-        worker: {
-          include: { user: true, services: { include: { service: true } } },
-        },
+        worker: { include: { user: true } },
         service: true,
-        proposals: { orderBy: { createdAt: 'desc' } },
-        messages: {
-          include: { sender: true },
-          orderBy: { createdAt: 'asc' },
-        },
+        proposals: { orderBy: { createdAt: 'asc' } },
         feedback: true,
       },
     });
@@ -303,6 +297,13 @@ export class BookingsService {
     }
 
     return this.updateBookingStatus(bookingId, BookingStatus.CANCELLED);
+  }
+
+  async getProposals(bookingId: string) {
+    return this.prisma.priceProposal.findMany({
+      where: { bookingId },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   async createPriceProposal(bookingId: string, dto: CreatePriceProposalDto) {
