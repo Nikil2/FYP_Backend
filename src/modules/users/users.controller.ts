@@ -14,6 +14,10 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -50,7 +54,65 @@ export class UsersController {
     return this.usersService.login(loginDto);
   }
 
+  /**
+   * POST /users/forgot-password
+   * Send OTP to phone number (dummy: OTP is always 000000)
+   */
+  @Post('forgot-password')
+  @HttpCode(200)
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+  ): Promise<{ message: string }> {
+    return this.usersService.forgotPassword(dto.phoneNumber);
+  }
+
+  /**
+   * POST /users/verify-otp
+   * Verify OTP for password reset (dummy: OTP is 000000)
+   */
+  @Post('verify-otp')
+  @HttpCode(200)
+  async verifyOtp(
+    @Body() dto: VerifyOtpDto,
+  ): Promise<{ message: string; verified: boolean }> {
+    return this.usersService.verifyOtp(dto.phoneNumber, dto.otp);
+  }
+
+  /**
+   * POST /users/reset-password
+   * Reset password using phone + OTP
+   */
+  @Post('reset-password')
+  @HttpCode(200)
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
+    return this.usersService.resetPassword(
+      dto.phoneNumber,
+      dto.otp,
+      dto.newPassword,
+    );
+  }
+
   // ==================== AUTHENTICATED ENDPOINTS ====================
+
+  /**
+   * POST /users/change-password
+   * Change password for authenticated user
+   */
+  @Post('change-password')
+  @HttpCode(200)
+  @UseGuards(JwtAuthGuard)
+  async changePassword(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    return this.usersService.changePassword(
+      userId,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+  }
 
   /**
    * GET /users/me

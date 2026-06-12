@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
@@ -221,6 +222,89 @@ export class UsersService {
     await this.prisma.user.delete({
       where: { id: userId },
     });
+  }
+
+  /**
+   * Forgot password — verifies phone exists and "sends" OTP (fixed: 000000)
+   */
+  async forgotPassword(phoneNumber: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ where: { phoneNumber } });
+    if (!user) {
+      throw new NotFoundException('No account found with this phone number');
+    }
+    return { message: 'OTP sent successfully' };
+  }
+
+  /**
+   * Verify OTP — dummy OTP is always 000000
+   */
+  async verifyOtp(
+    phoneNumber: string,
+    otp: string,
+  ): Promise<{ message: string; verified: boolean }> {
+    if (otp !== '000000') {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+    const user = await this.prisma.user.findUnique({ where: { phoneNumber } });
+    if (!user) {
+      throw new NotFoundException('No account found with this phone number');
+    }
+    return { message: 'OTP verified successfully', verified: true };
+  }
+
+  /**
+   * Reset password using phone + OTP + new password
+   */
+  async resetPassword(
+    phoneNumber: string,
+    otp: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    if (otp !== '000000') {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+    const user = await this.prisma.user.findUnique({ where: { phoneNumber } });
+    if (!user) {
+      throw new NotFoundException('No account found with this phone number');
+    }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { phoneNumber },
+      data: { password: hashedPassword },
+    });
+    return { message: 'Password reset successfully' };
+  }
+
+  /**
+   * Change password for authenticated user
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, password: true },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const isCurrentValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+    if (currentPassword === newPassword) {
+      throw new BadRequestException(
+        'New password must be different from current password',
+      );
+    }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+    return { message: 'Password changed successfully' };
   }
 
   /**
