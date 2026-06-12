@@ -80,9 +80,10 @@ export class UsersService {
   ): Promise<{ user: UserResponseDto; token: string }> {
     const { phoneNumber, password } = loginDto;
 
-    // Find user by phone (include password for verification)
-    const user = await this.prisma.user.findUnique({
-      where: { phoneNumber },
+    // Find user by phone — try all format variants to handle DB inconsistency
+    const variants = this.phoneVariants(phoneNumber);
+    const user = await this.prisma.user.findFirst({
+      where: { phoneNumber: { in: variants } },
       select: {
         id: true,
         phoneNumber: true,
@@ -225,10 +226,49 @@ export class UsersService {
   }
 
   /**
+   * Normalize Pakistani phone number to a canonical form for DB lookup.
+   * Tries +92XXXXXXXXXX first, then 0XXXXXXXXXX, then raw — returns all
+   * candidates so we can do an OR query.
+   */
+  private phoneVariants(phoneNumber: string): string[] {
+    const digits = phoneNumber.replace(/\D/g, '');
+    const variants = new Set<string>();
+
+    // +923XXXXXXXXX (12 digits starting 92)
+    if (digits.startsWith('92') && digits.length === 12) {
+      variants.add(`+92${digits.slice(2)}`);
+      variants.add(`0${digits.slice(2)}`);
+      variants.add(digits.slice(2)); // 10-digit
+    }
+    // 03XXXXXXXXX (11 digits starting 0)
+    else if (digits.startsWith('0') && digits.length === 11) {
+      variants.add(`+92${digits.slice(1)}`);
+      variants.add(digits); // keep as-is (03...)
+      variants.add(digits.slice(1)); // 10-digit
+    }
+    // 3XXXXXXXXX (10 digits)
+    else if (digits.length === 10 && digits.startsWith('3')) {
+      variants.add(`+92${digits}`);
+      variants.add(`0${digits}`);
+      variants.add(digits);
+    }
+
+    variants.add(phoneNumber.trim()); // always include raw input
+    return Array.from(variants);
+  }
+
+  private async findUserByPhone(phoneNumber: string) {
+    const variants = this.phoneVariants(phoneNumber);
+    return this.prisma.user.findFirst({
+      where: { phoneNumber: { in: variants } },
+    });
+  }
+
+  /**
    * Forgot password — verifies phone exists and "sends" OTP (fixed: 000000)
    */
   async forgotPassword(phoneNumber: string): Promise<{ message: string }> {
-    const user = await this.prisma.user.findUnique({ where: { phoneNumber } });
+    const user = await this.findUserByPhone(phoneNumber);
     if (!user) {
       throw new NotFoundException('No account found with this phone number');
     }
@@ -245,7 +285,7 @@ export class UsersService {
     if (otp !== '000000') {
       throw new UnauthorizedException('Invalid OTP');
     }
-    const user = await this.prisma.user.findUnique({ where: { phoneNumber } });
+    const user = await this.findUserByPhone(phoneNumber);
     if (!user) {
       throw new NotFoundException('No account found with this phone number');
     }
@@ -263,13 +303,13 @@ export class UsersService {
     if (otp !== '000000') {
       throw new UnauthorizedException('Invalid OTP');
     }
-    const user = await this.prisma.user.findUnique({ where: { phoneNumber } });
+    const user = await this.findUserByPhone(phoneNumber);
     if (!user) {
       throw new NotFoundException('No account found with this phone number');
     }
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.prisma.user.update({
-      where: { phoneNumber },
+      where: { id: user.id },
       data: { password: hashedPassword },
     });
     return { message: 'Password reset successfully' };
