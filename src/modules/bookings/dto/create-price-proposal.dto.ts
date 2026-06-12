@@ -1,9 +1,9 @@
-import { IsUUID, IsNotEmpty, IsNumber, Min } from 'class-validator';
+import { IsUUID, IsNotEmpty, IsNumber, Min, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreatePriceProposalDto {
+  @IsOptional()
   @IsUUID()
-  @IsNotEmpty()
   proposedBy: string;
 
   @IsNumber()
