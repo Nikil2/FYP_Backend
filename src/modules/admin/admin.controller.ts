@@ -510,4 +510,102 @@ export class AdminController {
         : 'Worker bonus eligibility restored',
     };
   }
+
+  // ==================== FINANCE MANAGEMENT ====================
+
+  /**
+   * Platform-wide financial summary.
+   * GET /admin/finance/summary
+   */
+  @Get('finance/summary')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getFinanceSummary() {
+    return { data: await this.adminService.getFinanceSummary() };
+  }
+
+  /**
+   * Paginated commission transaction ledger.
+   * GET /admin/finance/commissions?page=1&limit=20&workerId=
+   */
+  @Get('finance/commissions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getAllCommissions(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('workerId') workerId?: string,
+  ) {
+    return this.adminService.getAllCommissions(
+      Math.max(1, Number(page)),
+      Math.max(1, Number(limit)),
+      workerId,
+    );
+  }
+
+  /**
+   * All worker wallets with balances.
+   * GET /admin/finance/wallets?page=1&limit=20&search=
+   */
+  @Get('finance/wallets')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getAllWorkerWallets(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.getAllWorkerWallets(
+      Math.max(1, Number(page)),
+      Math.max(1, Number(limit)),
+      search,
+    );
+  }
+
+  /**
+   * Paginated bonus records.
+   * GET /admin/bonus/records?page=1&limit=20&status=PENDING
+   */
+  @Get('bonus/records')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getAllBonusRecords(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('status') status?: string,
+  ) {
+    return this.adminService.getAllBonusRecords(
+      Math.max(1, Number(page)),
+      Math.max(1, Number(limit)),
+      status,
+    );
+  }
+
+  /**
+   * Manually release a pending/rejected bonus to a worker's wallet.
+   * POST /admin/bonus/records/:id/release
+   */
+  @Post('bonus/records/:id/release')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async releaseBonusManually(@Param('id') bonusId: string) {
+    return {
+      data: await this.adminService.releaseBonusManually(bonusId),
+      message: 'Bonus released to worker wallet',
+    };
+  }
+
+  /**
+   * Reject a pending bonus.
+   * POST /admin/bonus/records/:id/reject
+   */
+  @Post('bonus/records/:id/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async rejectBonus(@Param('id') bonusId: string) {
+    return {
+      data: await this.adminService.rejectBonus(bonusId),
+      message: 'Bonus rejected',
+    };
+  }
 }

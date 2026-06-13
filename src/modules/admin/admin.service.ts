@@ -1498,4 +1498,199 @@ export class AdminService {
       select: { id: true, isBonusSuspended: true },
     });
   }
+
+  // ==================== FINANCE ADMIN ====================
+
+  async getFinanceSummary() {
+    const [commissionAgg, bonusAgg, topupAgg, workerWallets] = await Promise.all([
+      this.prisma.walletTransaction.aggregate({
+        where: { type: 'COMMISSION_DEBIT' },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.walletTransaction.aggregate({
+        where: { type: 'BONUS_CREDIT' },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.walletTransaction.aggregate({
+        where: { type: 'TOPUP_CREDIT' },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      this.prisma.workerProfile.aggregate({
+        _sum: { walletBalance: true },
+        _count: true,
+      }),
+    ]);
+
+    const totalCommission = Math.abs(Number(commissionAgg._sum.amount ?? 0));
+    const totalBonuses = Number(bonusAgg._sum.amount ?? 0);
+    const totalTopups = Number(topupAgg._sum.amount ?? 0);
+
+    return {
+      totalCommissionCollected: totalCommission,
+      totalBonusesPaid: totalBonuses,
+      totalTopupsReceived: totalTopups,
+      netPlatformRevenue: totalCommission - totalBonuses,
+      commissionTxnCount: commissionAgg._count,
+      bonusTxnCount: bonusAgg._count,
+      totalWorkerWalletBalance: Number(workerWallets._sum.walletBalance ?? 0),
+      totalWorkers: workerWallets._count,
+    };
+  }
+
+  async getAllCommissions(page: number, limit: number, workerId?: string) {
+    const skip = (page - 1) * limit;
+    const where = {
+      type: 'COMMISSION_DEBIT' as const,
+      ...(workerId ? { workerId } : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.walletTransaction.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          worker: {
+            select: {
+              id: true,
+              user: { select: { fullName: true, phoneNumber: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.walletTransaction.count({ where }),
+    ]);
+
+    return {
+      data: items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getAllWorkerWallets(page: number, limit: number, search?: string) {
+    const skip = (page - 1) * limit;
+    const where = search
+      ? {
+          user: {
+            OR: [
+              { fullName: { contains: search, mode: 'insensitive' as const } },
+              { phoneNumber: { contains: search } },
+            ],
+          },
+        }
+      : {};
+
+    const [workers, total] = await Promise.all([
+      this.prisma.workerProfile.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { walletBalance: 'asc' },
+        select: {
+          id: true,
+          walletBalance: true,
+          currentTier: true,
+          isBonusSuspended: true,
+          totalJobsCompleted: true,
+          averageRating: true,
+          user: { select: { fullName: true, phoneNumber: true } },
+        },
+      }),
+      this.prisma.workerProfile.count({ where }),
+    ]);
+
+    return {
+      data: workers,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async getAllBonusRecords(page: number, limit: number, status?: string) {
+    const skip = (page - 1) * limit;
+    const where = status ? { status: status as any } : {};
+
+    const [items, total] = await Promise.all([
+      this.prisma.bonusRecord.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          worker: {
+            select: {
+              id: true,
+              currentTier: true,
+              user: { select: { fullName: true, phoneNumber: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.bonusRecord.count({ where }),
+    ]);
+
+    return {
+      data: items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async releaseBonusManually(bonusId: string) {
+    const bonus = await this.prisma.bonusRecord.findUnique({
+      where: { id: bonusId },
+      include: { worker: { select: { id: true, walletBalance: true } } },
+    });
+    if (!bonus) throw new NotFoundException(`Bonus record ${bonusId} not found`);
+    if (bonus.status === 'PAID')
+      throw new BadRequestException('Bonus already paid');
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.bonusRecord.update({
+        where: { id: bonusId },
+        data: { status: 'PAID' },
+      });
+
+      await tx.walletTransaction.create({
+        data: {
+          workerId: bonus.workerId,
+          type: 'BONUS_CREDIT',
+          amount: bonus.bonusAmount,
+          balanceAfter: Number(bonus.worker.walletBalance) + Number(bonus.bonusAmount),
+          description: `Admin-released bonus (window ${bonus.windowIndex})`,
+          bonusId: bonus.id,
+        },
+      });
+
+      await tx.workerProfile.update({
+        where: { id: bonus.workerId },
+        data: { walletBalance: { increment: bonus.bonusAmount } },
+      });
+
+      return updated;
+    });
+  }
+
+  async rejectBonus(bonusId: string) {
+    const bonus = await this.prisma.bonusRecord.findUnique({ where: { id: bonusId } });
+    if (!bonus) throw new NotFoundException(`Bonus record ${bonusId} not found`);
+    if (bonus.status !== 'PENDING')
+      throw new BadRequestException('Only PENDING bonuses can be rejected');
+
+    return this.prisma.bonusRecord.update({
+      where: { id: bonusId },
+      data: { status: 'REJECTED' },
+    });
+  }
 }
