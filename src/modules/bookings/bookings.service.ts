@@ -304,9 +304,12 @@ export class BookingsService {
     if (booking.worker.userId !== workerUserId) {
       throw new ForbiddenException('Only the assigned worker can mark this job done');
     }
-    if (booking.status !== BookingStatus.IN_PROGRESS) {
+    if (
+      booking.status !== BookingStatus.IN_PROGRESS &&
+      booking.status !== BookingStatus.ACCEPTED
+    ) {
       throw new BadRequestException(
-        'Only an in-progress job can be marked as done',
+        'Only an accepted or in-progress job can be marked as done',
       );
     }
 
