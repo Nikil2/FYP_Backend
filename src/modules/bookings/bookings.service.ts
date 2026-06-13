@@ -15,6 +15,7 @@ import { CreateBookingDto, CreatePriceProposalDto } from './dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { WalletService } from '../wallet/wallet.service';
+import { BonusService, BonusEvaluationResult } from '../bonus/bonus.service';
 
 @Injectable()
 export class BookingsService {
@@ -23,6 +24,7 @@ export class BookingsService {
     private notificationsService: NotificationsService,
     private realtimeGateway: RealtimeGateway,
     private walletService: WalletService,
+    private bonusService: BonusService,
   ) {}
 
   async createBooking(createBookingDto: CreateBookingDto) {
@@ -350,7 +352,7 @@ export class BookingsService {
     const finalPrice = booking.finalPrice ? Number(booking.finalPrice) : 0;
     const commission = Math.round(finalPrice * rate * 100) / 100;
 
-    await this.prisma.$transaction(async (tx) => {
+    const bonusResult = await this.prisma.$transaction(async (tx) => {
       // 1. mark completed + stamp commission snapshot
       await tx.booking.update({
         where: { id: bookingId },
@@ -363,7 +365,7 @@ export class BookingsService {
       });
 
       // 2. count the job (the counter that was never incremented before)
-      await tx.workerProfile.update({
+      const updatedWorker = await tx.workerProfile.update({
         where: { id: booking.worker.id },
         data: { totalJobsCompleted: { increment: 1 } },
       });
@@ -384,9 +386,11 @@ export class BookingsService {
         );
       }
 
-      // 4. TODO (Part 3): bonus engine — if totalJobsCompleted % 20 === 0,
-      //    evaluate the rolling-20 window inside this same transaction.
+      // 4. bonus engine — tier recompute + rolling-20 cashback, same transaction
+      return this.bonusService.processCompletion(tx, updatedWorker);
     });
+
+    await this.emitBonusNotifications(booking.worker.userId, bonusResult);
 
     // notify both sides + realtime
     await this.notificationsService.createNotification(
@@ -415,6 +419,44 @@ export class BookingsService {
     );
 
     return this.getBookingById(bookingId);
+  }
+
+  /**
+   * Fire tier-up / bonus-earned / milestone notifications after the completion
+   * transaction commits (US-003, US-004, US-014).
+   */
+  private async emitBonusNotifications(
+    workerUserId: string,
+    result: BonusEvaluationResult,
+  ) {
+    if (result.bonusPaid && result.bonusAmount > 0) {
+      await this.notificationsService.createNotification(
+        workerUserId,
+        '🎉 Bonus Earned!',
+        `You earned Rs. ${result.bonusAmount} cashback for completing ${
+          result.windowIndex! * 20
+        } jobs.`,
+        'BONUS_EARNED',
+      );
+    }
+
+    if (result.tierChanged && result.newTier !== 'NONE') {
+      await this.notificationsService.createNotification(
+        workerUserId,
+        '⭐ New Tier Unlocked',
+        `Congratulations! You are now a ${result.newTier} worker.`,
+        'TIER_UP',
+      );
+    }
+
+    if (result.milestonePercent) {
+      await this.notificationsService.createNotification(
+        workerUserId,
+        'Keep going!',
+        `You're ${result.milestonePercent}% of the way to your next bonus.`,
+        'BONUS_MILESTONE',
+      );
+    }
   }
 
   async cancelBooking(bookingId: string, cancelledByUserId?: string) {

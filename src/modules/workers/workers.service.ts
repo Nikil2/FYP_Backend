@@ -323,7 +323,9 @@ export class WorkersService {
       take,
     });
 
-    return workers.map((worker) => this.mapToResponseDto(worker.user, worker));
+    return workers
+      .map((worker) => this.mapToResponseDto(worker.user, worker))
+      .sort((a, b) => (b.rankingScore ?? 0) - (a.rankingScore ?? 0));
   }
 
   /**
@@ -366,7 +368,9 @@ export class WorkersService {
       take,
     });
 
-    return workers.map((worker) => this.mapToResponseDto(worker.user, worker));
+    return workers
+      .map((worker) => this.mapToResponseDto(worker.user, worker))
+      .sort((a, b) => (b.rankingScore ?? 0) - (a.rankingScore ?? 0));
   }
 
   /**
@@ -514,9 +518,34 @@ export class WorkersService {
       verificationStatus: workerProfile.verificationStatus,
       averageRating: parseFloat(workerProfile.averageRating),
       totalJobsCompleted: workerProfile.totalJobsCompleted,
+      currentTier: workerProfile.currentTier ?? 'NONE',
+      rankingScore: this.calculateRankingScore(workerProfile),
       services,
       portfolio,
     };
+  }
+
+  /**
+   * Weighted ranking score (PDF section 6). Response-time and repeat-customer
+   * inputs aren't tracked yet, so they're held at neutral defaults — the formula
+   * is complete and those two factors slot in later without changing it.
+   */
+  private calculateRankingScore(workerProfile: any): number {
+    const ratingScore = parseFloat(workerProfile.averageRating ?? 0) / 5;
+    const jobsScore = Math.min(
+      (workerProfile.totalJobsCompleted ?? 0) / 200,
+      1,
+    );
+    const responseScore = 0.6; // neutral (MEDIUM) until response time is tracked
+    const repeatScore = 0; // until repeat-customer rate is tracked
+
+    const score =
+      0.4 * ratingScore +
+      0.3 * jobsScore +
+      0.2 * responseScore +
+      0.1 * repeatScore;
+
+    return Math.round(score * 1000) / 1000;
   }
 
   /**

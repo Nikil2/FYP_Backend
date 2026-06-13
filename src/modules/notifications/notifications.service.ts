@@ -24,13 +24,14 @@ export class NotificationsService {
         userId,
         title,
         body,
+        type: type || 'GENERAL',
       },
     });
 
     // Push via Socket.IO immediately
     this.realtimeGateway.emitNotification(userId, {
       ...notification,
-      type: type || 'GENERAL',
+      type: notification.type,
     });
 
     return notification;

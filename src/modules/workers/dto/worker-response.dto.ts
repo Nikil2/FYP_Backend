@@ -1,4 +1,4 @@
-import { UserRole, VerificationStatus } from '@prisma/client';
+import { UserRole, VerificationStatus, WorkerTier } from '@prisma/client';
 
 export class ServiceDto {
   id: number;
@@ -39,6 +39,8 @@ export class WorkerResponseDto {
   verificationStatus: VerificationStatus;
   averageRating: number;
   totalJobsCompleted: number;
+  currentTier: WorkerTier;
+  rankingScore?: number;
 
   // Services
   services: ServiceDto[];
