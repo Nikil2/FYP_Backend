@@ -10,10 +10,14 @@ import { CreateWorkerDto } from './dto/create-worker.dto';
 import { WorkerResponseDto } from './dto/worker-response.dto';
 import { UpdateOnlineStatusResponseDto } from './dto/update-online-status-response.dto';
 import { UserRole, VerificationStatus } from '@prisma/client';
+import { WalletService } from '../wallet/wallet.service';
 
 @Injectable()
 export class WorkersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private walletService: WalletService,
+  ) {}
 
   /**
    * Register a new worker
@@ -319,7 +323,9 @@ export class WorkersService {
       take,
     });
 
-    return workers.map((worker) => this.mapToResponseDto(worker.user, worker));
+    return workers
+      .map((worker) => this.mapToResponseDto(worker.user, worker))
+      .sort((a, b) => (b.rankingScore ?? 0) - (a.rankingScore ?? 0));
   }
 
   /**
@@ -362,7 +368,9 @@ export class WorkersService {
       take,
     });
 
-    return workers.map((worker) => this.mapToResponseDto(worker.user, worker));
+    return workers
+      .map((worker) => this.mapToResponseDto(worker.user, worker))
+      .sort((a, b) => (b.rankingScore ?? 0) - (a.rankingScore ?? 0));
   }
 
   /**
@@ -452,93 +460,17 @@ export class WorkersService {
   }
 
   /**
-   * Wallet summary based on completed bookings
+   * Wallet summary — backed by the real ledger (delegates to WalletService).
    */
   async getWalletSummary(workerId: string) {
-    const worker = await this.prisma.workerProfile.findUnique({
-      where: { id: workerId },
-    });
-    if (!worker) {
-      throw new NotFoundException(`Worker with ID ${workerId} not found`);
-    }
-
-    const completed = await this.prisma.booking.findMany({
-      where: {
-        workerId,
-        status: 'COMPLETED',
-        finalPrice: { not: null },
-      },
-      select: {
-        finalPrice: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const totalEarnings = completed.reduce(
-      (sum, b) => sum + Number(b.finalPrice || 0),
-      0,
-    );
-    const pending = await this.prisma.booking.findMany({
-      where: {
-        workerId,
-        status: { in: ['ACCEPTED', 'IN_PROGRESS'] as any },
-        finalPrice: { not: null },
-      },
-      select: { finalPrice: true },
-    });
-    const pendingBalance = pending.reduce(
-      (sum, b) => sum + Number(b.finalPrice || 0),
-      0,
-    );
-
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thisMonthEarnings = completed
-      .filter((b) => b.createdAt >= monthStart)
-      .reduce((sum, b) => sum + Number(b.finalPrice || 0), 0);
-
-    return {
-      workerId,
-      totalEarnings,
-      availableBalance: totalEarnings,
-      pendingBalance,
-      thisMonthEarnings,
-    };
+    return this.walletService.getSummary(workerId);
   }
 
   /**
-   * Wallet transactions list derived from completed bookings
+   * Wallet transactions — real ledger (delegates to WalletService).
    */
   async getWalletTransactions(workerId: string) {
-    const worker = await this.prisma.workerProfile.findUnique({
-      where: { id: workerId },
-    });
-    if (!worker) {
-      throw new NotFoundException(`Worker with ID ${workerId} not found`);
-    }
-
-    const completed = await this.prisma.booking.findMany({
-      where: {
-        workerId,
-        status: 'COMPLETED',
-        finalPrice: { not: null },
-      },
-      include: {
-        service: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    return completed.map((booking) => ({
-      id: booking.id,
-      type: 'credit',
-      amount: Number(booking.finalPrice || 0),
-      status: 'completed',
-      description: `Payment received for ${booking.service.name}`,
-      date: booking.createdAt,
-      orderId: booking.id,
-    }));
+    return this.walletService.getTransactions(workerId);
   }
 
   /**
@@ -586,9 +518,34 @@ export class WorkersService {
       verificationStatus: workerProfile.verificationStatus,
       averageRating: parseFloat(workerProfile.averageRating),
       totalJobsCompleted: workerProfile.totalJobsCompleted,
+      currentTier: workerProfile.currentTier ?? 'NONE',
+      rankingScore: this.calculateRankingScore(workerProfile),
       services,
       portfolio,
     };
+  }
+
+  /**
+   * Weighted ranking score (PDF section 6). Response-time and repeat-customer
+   * inputs aren't tracked yet, so they're held at neutral defaults — the formula
+   * is complete and those two factors slot in later without changing it.
+   */
+  private calculateRankingScore(workerProfile: any): number {
+    const ratingScore = parseFloat(workerProfile.averageRating ?? 0) / 5;
+    const jobsScore = Math.min(
+      (workerProfile.totalJobsCompleted ?? 0) / 200,
+      1,
+    );
+    const responseScore = 0.6; // neutral (MEDIUM) until response time is tracked
+    const repeatScore = 0; // until repeat-customer rate is tracked
+
+    const score =
+      0.4 * ratingScore +
+      0.3 * jobsScore +
+      0.2 * responseScore +
+      0.1 * repeatScore;
+
+    return Math.round(score * 1000) / 1000;
   }
 
   /**

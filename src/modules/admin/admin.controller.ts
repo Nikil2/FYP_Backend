@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -450,6 +451,161 @@ export class AdminController {
     const analytics = await this.adminService.getAnalytics();
     return {
       data: analytics,
+    };
+  }
+
+  // ==================== BONUS PROGRAM ====================
+
+  /**
+   * Get bonus program config (thresholds, cashback rates, eligibility).
+   * GET /admin/bonus/config
+   */
+  @Get('bonus/config')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getBonusConfig() {
+    return { data: await this.adminService.getBonusConfig() };
+  }
+
+  /**
+   * Update bonus program config (US-010, US-011).
+   * PATCH /admin/bonus/config
+   */
+  @Patch('bonus/config')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async updateBonusConfig(@Body() body: Record<string, number>) {
+    return {
+      data: await this.adminService.updateBonusConfig(body),
+      message: 'Bonus config updated',
+    };
+  }
+
+  /**
+   * Bonus analytics: total commission earned vs total bonuses paid (US-012).
+   * GET /admin/bonus/analytics
+   */
+  @Get('bonus/analytics')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getBonusAnalytics() {
+    return { data: await this.adminService.getBonusAnalytics() };
+  }
+
+  /**
+   * Suspend / un-suspend a worker's bonus eligibility (US-013).
+   * POST /admin/workers/:id/bonus-suspend  { "suspended": true }
+   */
+  @Post('workers/:id/bonus-suspend')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async setBonusSuspension(
+    @Param('id') workerId: string,
+    @Body('suspended') suspended: boolean,
+  ) {
+    return {
+      data: await this.adminService.setBonusSuspension(workerId, suspended),
+      message: suspended
+        ? 'Worker bonus eligibility suspended'
+        : 'Worker bonus eligibility restored',
+    };
+  }
+
+  // ==================== FINANCE MANAGEMENT ====================
+
+  /**
+   * Platform-wide financial summary.
+   * GET /admin/finance/summary
+   */
+  @Get('finance/summary')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getFinanceSummary() {
+    return { data: await this.adminService.getFinanceSummary() };
+  }
+
+  /**
+   * Paginated commission transaction ledger.
+   * GET /admin/finance/commissions?page=1&limit=20&workerId=
+   */
+  @Get('finance/commissions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getAllCommissions(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('workerId') workerId?: string,
+  ) {
+    return this.adminService.getAllCommissions(
+      Math.max(1, Number(page)),
+      Math.max(1, Number(limit)),
+      workerId,
+    );
+  }
+
+  /**
+   * All worker wallets with balances.
+   * GET /admin/finance/wallets?page=1&limit=20&search=
+   */
+  @Get('finance/wallets')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getAllWorkerWallets(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.getAllWorkerWallets(
+      Math.max(1, Number(page)),
+      Math.max(1, Number(limit)),
+      search,
+    );
+  }
+
+  /**
+   * Paginated bonus records.
+   * GET /admin/bonus/records?page=1&limit=20&status=PENDING
+   */
+  @Get('bonus/records')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getAllBonusRecords(
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '20',
+    @Query('status') status?: string,
+  ) {
+    return this.adminService.getAllBonusRecords(
+      Math.max(1, Number(page)),
+      Math.max(1, Number(limit)),
+      status,
+    );
+  }
+
+  /**
+   * Manually release a pending/rejected bonus to a worker's wallet.
+   * POST /admin/bonus/records/:id/release
+   */
+  @Post('bonus/records/:id/release')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async releaseBonusManually(@Param('id') bonusId: string) {
+    return {
+      data: await this.adminService.releaseBonusManually(bonusId),
+      message: 'Bonus released to worker wallet',
+    };
+  }
+
+  /**
+   * Reject a pending bonus.
+   * POST /admin/bonus/records/:id/reject
+   */
+  @Post('bonus/records/:id/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async rejectBonus(@Param('id') bonusId: string) {
+    return {
+      data: await this.adminService.rejectBonus(bonusId),
+      message: 'Bonus rejected',
     };
   }
 }
