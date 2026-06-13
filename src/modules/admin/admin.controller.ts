@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -450,6 +451,63 @@ export class AdminController {
     const analytics = await this.adminService.getAnalytics();
     return {
       data: analytics,
+    };
+  }
+
+  // ==================== BONUS PROGRAM ====================
+
+  /**
+   * Get bonus program config (thresholds, cashback rates, eligibility).
+   * GET /admin/bonus/config
+   */
+  @Get('bonus/config')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getBonusConfig() {
+    return { data: await this.adminService.getBonusConfig() };
+  }
+
+  /**
+   * Update bonus program config (US-010, US-011).
+   * PATCH /admin/bonus/config
+   */
+  @Patch('bonus/config')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async updateBonusConfig(@Body() body: Record<string, number>) {
+    return {
+      data: await this.adminService.updateBonusConfig(body),
+      message: 'Bonus config updated',
+    };
+  }
+
+  /**
+   * Bonus analytics: total commission earned vs total bonuses paid (US-012).
+   * GET /admin/bonus/analytics
+   */
+  @Get('bonus/analytics')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getBonusAnalytics() {
+    return { data: await this.adminService.getBonusAnalytics() };
+  }
+
+  /**
+   * Suspend / un-suspend a worker's bonus eligibility (US-013).
+   * POST /admin/workers/:id/bonus-suspend  { "suspended": true }
+   */
+  @Post('workers/:id/bonus-suspend')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async setBonusSuspension(
+    @Param('id') workerId: string,
+    @Body('suspended') suspended: boolean,
+  ) {
+    return {
+      data: await this.adminService.setBonusSuspension(workerId, suspended),
+      message: suspended
+        ? 'Worker bonus eligibility suspended'
+        : 'Worker bonus eligibility restored',
     };
   }
 }

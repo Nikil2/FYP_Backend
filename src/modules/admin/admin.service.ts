@@ -1405,4 +1405,97 @@ export class AdminService {
     const weekStart = new Date(d.setDate(d.getDate() - d.getDay()));
     return weekStart.toISOString().split('T')[0];
   }
+
+  // ==================== BONUS PROGRAM ====================
+
+  /** Read (and lazily create) the singleton bonus config. */
+  async getBonusConfig() {
+    const existing = await this.prisma.bonusConfig.findUnique({
+      where: { id: 1 },
+    });
+    return existing ?? this.prisma.bonusConfig.create({ data: { id: 1 } });
+  }
+
+  /** Update bonus thresholds, cashback rates, and eligibility gates. */
+  async updateBonusConfig(body: Record<string, number>) {
+    const allowed = [
+      'commissionRate',
+      'bronzeJobs',
+      'silverJobs',
+      'goldJobs',
+      'platinumJobs',
+      'bronzeCashback',
+      'silverCashback',
+      'goldCashback',
+      'platinumCashback',
+      'minRating',
+      'minCompletionRate',
+      'maxCancellationRate',
+    ];
+    const data: Record<string, number> = {};
+    for (const key of allowed) {
+      if (body[key] !== undefined && body[key] !== null) {
+        data[key] = body[key];
+      }
+    }
+
+    await this.getBonusConfig(); // ensure row exists
+    return this.prisma.bonusConfig.update({ where: { id: 1 }, data });
+  }
+
+  /** Total commission earned vs total bonuses paid (US-012). */
+  async getBonusAnalytics() {
+    const [commissionAgg, bonusPaidAgg, paidCount, rejectedCount, workers] =
+      await Promise.all([
+        this.prisma.walletTransaction.aggregate({
+          where: { type: 'COMMISSION_DEBIT' },
+          _sum: { amount: true },
+        }),
+        this.prisma.bonusRecord.aggregate({
+          where: { status: 'PAID' },
+          _sum: { bonusAmount: true },
+        }),
+        this.prisma.bonusRecord.count({ where: { status: 'PAID' } }),
+        this.prisma.bonusRecord.count({ where: { status: 'REJECTED' } }),
+        this.prisma.workerProfile.findMany({ select: { currentTier: true } }),
+      ]);
+
+    const totalCommissionEarned = commissionAgg._sum.amount
+      ? Math.abs(Number(commissionAgg._sum.amount))
+      : 0;
+    const totalBonusesPaid = Number(bonusPaidAgg._sum.bonusAmount ?? 0);
+
+    const tierTally: Record<string, number> = {};
+    for (const w of workers) {
+      tierTally[w.currentTier] = (tierTally[w.currentTier] ?? 0) + 1;
+    }
+
+    return {
+      totalCommissionEarned,
+      totalBonusesPaid,
+      netPlatformRevenue: totalCommissionEarned - totalBonusesPaid,
+      bonusesPaidCount: paidCount,
+      bonusesRejectedCount: rejectedCount,
+      workersByTier: Object.entries(tierTally).map(([tier, count]) => ({
+        tier,
+        count,
+      })),
+    };
+  }
+
+  /** Suspend / restore a worker's bonus eligibility (US-013). */
+  async setBonusSuspension(workerId: string, suspended: boolean) {
+    const worker = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+      select: { id: true },
+    });
+    if (!worker) {
+      throw new NotFoundException(`Worker with ID ${workerId} not found`);
+    }
+    return this.prisma.workerProfile.update({
+      where: { id: workerId },
+      data: { isBonusSuspended: suspended },
+      select: { id: true, isBonusSuspended: true },
+    });
+  }
 }
