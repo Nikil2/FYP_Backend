@@ -11,12 +11,14 @@ import {
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateBookingDto, CreatePriceProposalDto } from './dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 
 @Injectable()
 export class BookingsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private realtimeGateway: RealtimeGateway,
   ) {}
 
   async createBooking(createBookingDto: CreateBookingDto) {
@@ -271,6 +273,10 @@ export class BookingsService {
       'BOOKING_STATUS',
     );
 
+    const statusPayload = { bookingId, status: nextStatus };
+    this.realtimeGateway.emitToUser(updated.customer.id, 'booking_status_updated', statusPayload);
+    this.realtimeGateway.emitToUser(updated.worker.user.id, 'booking_status_updated', statusPayload);
+
     return updated;
   }
 
@@ -346,6 +352,10 @@ export class BookingsService {
       'PRICE_PROPOSAL',
     );
 
+    const proposalPayload = { bookingId, ...proposal };
+    this.realtimeGateway.emitToUser(booking.customerId, 'new_proposal', proposalPayload);
+    this.realtimeGateway.emitToUser(booking.worker.userId, 'new_proposal', proposalPayload);
+
     return proposal;
   }
 
@@ -403,6 +413,10 @@ export class BookingsService {
       `Proposal accepted for ${booking.service.name}.`,
       'PRICE_PROPOSAL',
     );
+
+    const acceptedPayload = { bookingId, status: 'ACCEPTED', finalPrice: proposal.amount };
+    this.realtimeGateway.emitToUser(booking.customerId, 'booking_status_updated', acceptedPayload);
+    this.realtimeGateway.emitToUser(booking.worker.userId, 'booking_status_updated', acceptedPayload);
 
     return this.getBookingById(bookingId);
   }
