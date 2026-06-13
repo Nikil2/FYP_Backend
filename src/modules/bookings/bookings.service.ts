@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -283,13 +284,146 @@ export class BookingsService {
     return updated;
   }
 
-  async cancelBooking(bookingId: string) {
+  /**
+   * Worker marks an in-progress job as done. Moves it to PENDING_CONFIRMATION —
+   * the job does NOT count yet. The customer must confirm (anti-fraud, US-008).
+   */
+  async markJobDone(bookingId: string, workerUserId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        service: true,
+        worker: { select: { userId: true } },
+      },
+    });
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+    if (booking.worker.userId !== workerUserId) {
+      throw new ForbiddenException('Only the assigned worker can mark this job done');
+    }
+    if (booking.status !== BookingStatus.IN_PROGRESS) {
+      throw new BadRequestException(
+        'Only an in-progress job can be marked as done',
+      );
+    }
+
+    return this.updateBookingStatus(
+      bookingId,
+      BookingStatus.PENDING_CONFIRMATION,
+    );
+  }
+
+  /**
+   * Customer confirms the job is complete. This is THE event that fires all stats:
+   * marks COMPLETED, counts the job, and debits the platform commission from the
+   * worker's wallet — atomically. (Bonus evaluation hooks in here in Part 3.)
+   */
+  async confirmCompletion(bookingId: string, customerUserId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
         customer: true,
         service: true,
-        worker: { select: { userId: true } },
+        worker: { select: { id: true, userId: true } },
+      },
+    });
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+    if (booking.customerId !== customerUserId) {
+      throw new ForbiddenException(
+        'Only the customer can confirm this booking',
+      );
+    }
+    if (booking.status !== BookingStatus.PENDING_CONFIRMATION) {
+      throw new BadRequestException(
+        'Booking must be awaiting confirmation to be completed',
+      );
+    }
+
+    // Commission rate from config (falls back to 10%).
+    const config = await this.prisma.bonusConfig.findUnique({
+      where: { id: 1 },
+    });
+    const rate = config ? Number(config.commissionRate) : 0.1;
+    const finalPrice = booking.finalPrice ? Number(booking.finalPrice) : 0;
+    const commission = Math.round(finalPrice * rate * 100) / 100;
+
+    await this.prisma.$transaction(async (tx) => {
+      // 1. mark completed + stamp commission snapshot
+      await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: BookingStatus.COMPLETED,
+          completedAt: new Date(),
+          commissionRate: rate,
+          commissionAmount: commission,
+        },
+      });
+
+      // 2. count the job (the counter that was never incremented before)
+      await tx.workerProfile.update({
+        where: { id: booking.worker.id },
+        data: { totalJobsCompleted: { increment: 1 } },
+      });
+
+      // 3. debit the platform commission from the worker's wallet (+ ledger row)
+      if (commission > 0) {
+        await this.walletService.adjust(
+          {
+            workerId: booking.worker.id,
+            type: WalletTxnType.COMMISSION_DEBIT,
+            amount: -commission,
+            description: `Commission (${(rate * 100).toFixed(
+              0,
+            )}%) for ${booking.service.name}`,
+            bookingId,
+          },
+          tx,
+        );
+      }
+
+      // 4. TODO (Part 3): bonus engine — if totalJobsCompleted % 20 === 0,
+      //    evaluate the rolling-20 window inside this same transaction.
+    });
+
+    // notify both sides + realtime
+    await this.notificationsService.createNotification(
+      booking.worker.userId,
+      'Job Completed',
+      `${booking.customer.fullName} confirmed completion of ${booking.service.name}.`,
+      'BOOKING_STATUS',
+    );
+    await this.notificationsService.createNotification(
+      booking.customerId,
+      'Booking Completed',
+      `Your booking for ${booking.service.name} is complete.`,
+      'BOOKING_STATUS',
+    );
+
+    const payload = { bookingId, status: BookingStatus.COMPLETED };
+    this.realtimeGateway.emitToUser(
+      booking.customerId,
+      'booking_status_updated',
+      payload,
+    );
+    this.realtimeGateway.emitToUser(
+      booking.worker.userId,
+      'booking_status_updated',
+      payload,
+    );
+
+    return this.getBookingById(bookingId);
+  }
+
+  async cancelBooking(bookingId: string, cancelledByUserId?: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        customer: true,
+        service: true,
+        worker: { select: { id: true, userId: true } },
       },
     });
     if (!booking) {
@@ -298,11 +432,20 @@ export class BookingsService {
 
     if (
       booking.status === BookingStatus.IN_PROGRESS ||
-      booking.status === BookingStatus.COMPLETED
+      booking.status === BookingStatus.COMPLETED ||
+      booking.status === BookingStatus.PENDING_CONFIRMATION
     ) {
       throw new BadRequestException(
-        'Cannot cancel in-progress or completed booking',
+        'Cannot cancel an in-progress, awaiting-confirmation, or completed booking',
       );
+    }
+
+    // Track worker-initiated cancellations (feeds completion/cancellation rate).
+    if (cancelledByUserId && cancelledByUserId === booking.worker.userId) {
+      await this.prisma.workerProfile.update({
+        where: { id: booking.worker.id },
+        data: { jobsCancelledByWorker: { increment: 1 } },
+      });
     }
 
     return this.updateBookingStatus(bookingId, BookingStatus.CANCELLED);

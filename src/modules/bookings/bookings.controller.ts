@@ -153,8 +153,39 @@ export class BookingsController {
    * Cancel booking
    */
   @Post(':id/cancel')
-  async cancelBooking(@Param('id') bookingId: string) {
-    return this.bookingsService.cancelBooking(bookingId);
+  async cancelBooking(
+    @Param('id') bookingId: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.bookingsService.cancelBooking(bookingId, userId);
+  }
+
+  /**
+   * PATCH /bookings/:id/mark-done
+   * Worker marks an in-progress job as done → awaits customer confirmation.
+   */
+  @Patch(':id/mark-done')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.WORKER)
+  async markJobDone(
+    @Param('id') bookingId: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.bookingsService.markJobDone(bookingId, userId);
+  }
+
+  /**
+   * PATCH /bookings/:id/confirm-completion
+   * Customer confirms completion → job counts + commission is collected.
+   */
+  @Patch(':id/confirm-completion')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.CUSTOMER)
+  async confirmCompletion(
+    @Param('id') bookingId: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.bookingsService.confirmCompletion(bookingId, userId);
   }
 
   /**
