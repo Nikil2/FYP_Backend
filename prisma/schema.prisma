@@ -52,11 +52,19 @@ model WorkerProfile {
   reviewNotes        String?
   reviewedBy         String?
   selfieImageUrl     String?
+  // --- financial / bonus fields ---
+  walletBalance         Decimal    @default(0) @db.Decimal(12, 2)
+  currentTier           WorkerTier @default(NONE)
+  jobsCancelledByWorker Int        @default(0)
+  isBonusSuspended      Boolean    @default(false)
+  hasActiveFraud        Boolean    @default(false)
   bookings           Booking[]          @relation("WorkerJobs")
   portfolio          WorkerPortfolio[]
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   schedule           WorkerSchedule[]
   services           WorkerService[]
+  wallet             WalletTransaction[]
+  bonuses            BonusRecord[]
 
   @@index([isOnline, verificationStatus])
 }
@@ -108,6 +116,9 @@ model Booking {
   scheduledAt DateTime?
   createdAt   DateTime        @default(now())
   imageUrls   String[]        @default([])
+  commissionRate   Decimal?   @db.Decimal(4, 3)
+  commissionAmount Decimal?   @db.Decimal(10, 2)
+  completedAt      DateTime?
   customer    User            @relation("CustomerBookings", fields: [customerId], references: [id])
   service     Service         @relation(fields: [serviceId], references: [id])
   worker      WorkerProfile   @relation("WorkerJobs", fields: [workerId], references: [id])
@@ -179,6 +190,7 @@ model Notification {
   userId    String
   title     String
   body      String
+  type      String   @default("GENERAL")
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -226,6 +238,78 @@ model spatial_ref_sys {
   proj4text String? @db.VarChar(2048)
 }
 
+model WalletTransaction {
+  id           String        @id @default(uuid())
+  workerId     String
+  type         WalletTxnType
+  amount       Decimal       @db.Decimal(12, 2)
+  balanceAfter Decimal       @db.Decimal(12, 2)
+  bookingId    String?
+  bonusId      String?
+  description  String
+  createdAt    DateTime      @default(now())
+  worker       WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId, createdAt])
+}
+
+model BonusRecord {
+  id                  String        @id @default(uuid())
+  workerId            String
+  tier                WorkerTier
+  windowIndex         Int
+  jobsInWindow        Int           @default(20)
+  commissionCollected Decimal       @db.Decimal(12, 2)
+  cashbackRate        Decimal       @db.Decimal(4, 3)
+  bonusAmount         Decimal       @db.Decimal(12, 2)
+  status              BonusStatus   @default(PENDING)
+  reason              String?
+  createdAt           DateTime      @default(now())
+  worker              WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@unique([workerId, windowIndex])
+  @@index([workerId])
+}
+
+model BonusConfig {
+  id                  Int      @id @default(1)
+  commissionRate      Decimal  @default(0.100) @db.Decimal(4, 3)
+  bronzeJobs          Int      @default(20)
+  silverJobs          Int      @default(50)
+  goldJobs            Int      @default(100)
+  platinumJobs        Int      @default(250)
+  bronzeCashback      Decimal  @default(0.10) @db.Decimal(4, 3)
+  silverCashback      Decimal  @default(0.15) @db.Decimal(4, 3)
+  goldCashback        Decimal  @default(0.20) @db.Decimal(4, 3)
+  platinumCashback    Decimal  @default(0.25) @db.Decimal(4, 3)
+  minRating           Decimal  @default(4.5) @db.Decimal(2, 1)
+  minCompletionRate   Decimal  @default(0.90) @db.Decimal(4, 3)
+  maxCancellationRate Decimal  @default(0.10) @db.Decimal(4, 3)
+  updatedAt           DateTime @updatedAt
+}
+
+enum WorkerTier {
+  NONE
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum WalletTxnType {
+  COMMISSION_DEBIT
+  BONUS_CREDIT
+  TOPUP_CREDIT
+  WITHDRAWAL_DEBIT
+  ADJUSTMENT
+}
+
+enum BonusStatus {
+  PENDING
+  PAID
+  REJECTED
+}
+
 enum UserRole {
   ADMIN
   CUSTOMER
@@ -243,6 +327,7 @@ enum BookingStatus {
   NEGOTIATION
   ACCEPTED
   IN_PROGRESS
+  PENDING_CONFIRMATION
   COMPLETED
   CANCELLED
   DISPUTED

@@ -7,11 +7,13 @@ import {
   BookingStatus,
   ProposalStatus,
   VerificationStatus,
+  WalletTxnType,
 } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateBookingDto, CreatePriceProposalDto } from './dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { WalletService } from '../wallet/wallet.service';
 
 @Injectable()
 export class BookingsService {
@@ -19,6 +21,7 @@ export class BookingsService {
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
     private realtimeGateway: RealtimeGateway,
+    private walletService: WalletService,
   ) {}
 
   async createBooking(createBookingDto: CreateBookingDto) {

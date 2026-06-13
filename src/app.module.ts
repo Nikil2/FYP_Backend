@@ -17,6 +17,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { ScheduleModule } from './modules/schedule/schedule.module';
+import { WalletModule } from './modules/wallet/wallet.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { ScheduleModule } from './modules/schedule/schedule.module';
     UsersModule,
     WorkersModule,
     ServicesModule,
+    WalletModule,
     BookingsModule,
     // Feature modules
     MessagesModule,
