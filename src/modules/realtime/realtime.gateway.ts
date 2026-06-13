@@ -312,6 +312,10 @@ export class RealtimeGateway
     this.server.to(`booking:${bookingId}`).emit('new_proposal', proposal);
   }
 
+  emitToUser(userId: string, event: string, data: any) {
+    this.server.to(`user:${userId}`).emit(event, data);
+  }
+
   /**
    * Check if a user is currently online (has connected sockets).
    */
