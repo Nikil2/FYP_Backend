@@ -624,12 +624,19 @@ export class AdminService {
   /**
    * Resolve a complaint
    */
-  async resolveComplaint(complaintId: string, adminId: string): Promise<any> {
+  async resolveComplaint(complaintId: string, adminUserId: string): Promise<any> {
+    const adminProfile = await this.prisma.adminProfile.findUnique({
+      where: { userId: adminUserId },
+    });
+    if (!adminProfile) {
+      throw new NotFoundException('Admin profile not found');
+    }
+
     const complaint = await this.prisma.complaint.update({
       where: { id: complaintId },
       data: {
         isResolved: true,
-        adminId,
+        adminId: adminProfile.id,
       },
       include: {
         booking: {
