@@ -67,6 +67,16 @@ export class UploadsController {
     return this.uploadsService.uploadEvidence(file, userId);
   }
 
+  /** POST /uploads/message — image attachment in chat */
+  @Post('message')
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  async uploadMessageImage(
+    @CurrentUser('sub') _userId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.uploadsService.uploadFile(file, 'message');
+  }
+
   /** DELETE /uploads/:publicId */
   @Delete(':publicId')
   async deleteFile(@Param('publicId') publicId: string) {

@@ -186,7 +186,7 @@ export class RealtimeGateway
   @SubscribeMessage('send_message')
   async handleSendMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { bookingId: string; content: string },
+    @MessageBody() data: { bookingId: string; content: string; type?: string },
   ) {
     const userId = client.data.userId;
     if (!userId || !data.bookingId || !data.content?.trim()) return;
@@ -202,12 +202,15 @@ export class RealtimeGateway
     const isWorker = booking.worker.userId === userId;
     if (!isCustomer && !isWorker) return;
 
+    const msgType =
+      data.type === 'IMAGE' ? MessageType.IMAGE : MessageType.TEXT;
+
     const message = await this.prisma.message.create({
       data: {
         bookingId: data.bookingId,
         senderId: userId,
         content: data.content.trim(),
-        type: MessageType.TEXT,
+        type: msgType,
       },
       include: {
         sender: {
@@ -224,7 +227,10 @@ export class RealtimeGateway
     // Notify the recipient
     const recipientId = isCustomer ? booking.worker.userId : booking.customerId;
     const senderName = client.data.fullName || 'Someone';
-    const preview = data.content.trim().slice(0, 80);
+    const preview =
+      msgType === MessageType.IMAGE
+        ? '📷 Sent an image'
+        : data.content.trim().slice(0, 80);
     try {
       const notification = await this.prisma.notification.create({
         data: {
