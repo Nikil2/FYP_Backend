@@ -1509,39 +1509,61 @@ export class AdminService {
   // ==================== FINANCE ADMIN ====================
 
   async getFinanceSummary() {
-    const [commissionAgg, bonusAgg, topupAgg, workerWallets] = await Promise.all([
-      this.prisma.walletTransaction.aggregate({
-        where: { type: 'COMMISSION_DEBIT' },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      this.prisma.walletTransaction.aggregate({
-        where: { type: 'BONUS_CREDIT' },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      this.prisma.walletTransaction.aggregate({
-        where: { type: 'TOPUP_CREDIT' },
-        _sum: { amount: true },
-        _count: true,
-      }),
-      this.prisma.workerProfile.aggregate({
-        _sum: { walletBalance: true },
-        _count: true,
-      }),
-    ]);
+    const [commissionAgg, bonusAgg, approvedPayments, pendingPayments, workerWallets] =
+      await Promise.all([
+        // Total commission charged to workers (auto-deducted on job completion)
+        this.prisma.walletTransaction.aggregate({
+          where: { type: 'COMMISSION_DEBIT' },
+          _sum: { amount: true },
+          _count: true,
+        }),
+        // Total bonuses paid out to workers
+        this.prisma.walletTransaction.aggregate({
+          where: { type: 'BONUS_CREDIT' },
+          _sum: { amount: true },
+          _count: true,
+        }),
+        // Total commission actually received (worker paid + admin approved)
+        this.prisma.commissionPayment.aggregate({
+          where: { status: 'APPROVED' },
+          _sum: { amount: true },
+          _count: true,
+        }),
+        // Total commission under review (submitted but not yet approved)
+        this.prisma.commissionPayment.aggregate({
+          where: { status: 'PENDING' },
+          _sum: { amount: true },
+          _count: true,
+        }),
+        this.prisma.workerProfile.aggregate({
+          _sum: { walletBalance: true },
+          _count: true,
+        }),
+      ]);
 
-    const totalCommission = Math.abs(Number(commissionAgg._sum.amount ?? 0));
+    const totalCommissionCharged = Math.abs(Number(commissionAgg._sum.amount ?? 0));
     const totalBonuses = Number(bonusAgg._sum.amount ?? 0);
-    const totalTopups = Number(topupAgg._sum.amount ?? 0);
+    const totalCommissionReceived = Number(approvedPayments._sum.amount ?? 0);
+    const totalCommissionPending = Number(pendingPayments._sum.amount ?? 0);
+    const totalCommissionOwed = Math.max(0, totalCommissionCharged - totalCommissionReceived);
 
     return {
-      totalCommissionCollected: totalCommission,
-      totalBonusesPaid: totalBonuses,
-      totalTopupsReceived: totalTopups,
-      netPlatformRevenue: totalCommission - totalBonuses,
+      // What was charged across all completed jobs
+      totalCommissionCharged,
       commissionTxnCount: commissionAgg._count,
+      // What workers actually paid and admin approved (real cash in hand)
+      totalCommissionReceived,
+      approvedPaymentCount: approvedPayments._count,
+      // What is sitting under review right now
+      totalCommissionPending,
+      pendingPaymentCount: pendingPayments._count,
+      // What is still owed but not yet submitted
+      totalCommissionOwed,
+      // Bonuses paid back to workers
+      totalBonusesPaid: totalBonuses,
       bonusTxnCount: bonusAgg._count,
+      // Net revenue = actual cash received − bonuses paid
+      netPlatformRevenue: totalCommissionReceived - totalBonuses,
       totalWorkerWalletBalance: Number(workerWallets._sum.walletBalance ?? 0),
       totalWorkers: workerWallets._count,
     };
