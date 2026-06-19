@@ -17,6 +17,7 @@ import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { WalletService } from '../wallet/wallet.service';
 import { BonusService, BonusEvaluationResult } from '../bonus/bonus.service';
 import { CustomerRewardsService } from '../customer-rewards/customer-rewards.service';
+import { CommissionService } from '../commission/commission.service';
 
 @Injectable()
 export class BookingsService {
@@ -27,6 +28,7 @@ export class BookingsService {
     private walletService: WalletService,
     private bonusService: BonusService,
     private customerRewardsService: CustomerRewardsService,
+    private commissionService: CommissionService,
   ) {}
 
   async createBooking(createBookingDto: CreateBookingDto) {
@@ -394,12 +396,20 @@ export class BookingsService {
         );
       }
 
-      // 4. award customer completion points inside the same transaction
+      // 4. start 15-day commission clock if not already running (after transaction commits)
+      // We call this outside the tx to avoid blocking, but after debit is done.
+
+      // 5. award customer completion points inside the same transaction
       await this.customerRewardsService.onBookingCompleted(booking.customerId, bookingId, tx);
 
       // 5. bonus engine — tier recompute + rolling-20 cashback, same transaction
       return this.bonusService.processCompletion(tx, updatedWorker);
     });
+
+    // Start 15-day commission due-date clock if commission was charged
+    if (commission > 0) {
+      await this.commissionService.ensureDueDateSet(booking.worker.id);
+    }
 
     await this.emitBonusNotifications(booking.worker.userId, bonusResult);
 
