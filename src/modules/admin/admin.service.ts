@@ -692,6 +692,17 @@ export class AdminService {
   /**
    * Get live and historical jobs/bookings with worker, customer, and service metadata.
    */
+  async getJobStats() {
+    const statuses = ['PENDING', 'NEGOTIATION', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'DISPUTED'] as const;
+    const counts = await Promise.all(
+      statuses.map((s) => this.prisma.booking.count({ where: { status: s } })),
+    );
+    const result = Object.fromEntries(statuses.map((s, i) => [s, counts[i]]));
+    const active = (result.PENDING ?? 0) + (result.NEGOTIATION ?? 0) + (result.ACCEPTED ?? 0) + (result.IN_PROGRESS ?? 0);
+    const total = statuses.reduce((sum, s) => sum + (result[s] ?? 0), 0);
+    return { ...result, ACTIVE: active, TOTAL: total };
+  }
+
   async getJobs(
     page: number = 1,
     limit: number = 20,
