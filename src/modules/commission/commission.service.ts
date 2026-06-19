@@ -25,11 +25,12 @@ export class CommissionService {
   async ensureDueDateSet(workerId: string) {
     const worker = await this.prisma.workerProfile.findUnique({
       where: { id: workerId },
-      select: { walletBalance: true, commissionDueAt: true },
+      select: { commissionDueAt: true },
     });
     if (!worker) return;
 
-    const owes = Number(worker.walletBalance) < 0;
+    const due = await this.getDueStatus(workerId);
+    const owes = due.amountDue > 0;
     const alreadySet = !!worker.commissionDueAt;
 
     if (owes && !alreadySet) {
@@ -57,13 +58,29 @@ export class CommissionService {
     });
     if (!worker) throw new NotFoundException('Worker not found');
 
-    const amountDue = Math.max(0, -Number(worker.walletBalance));
+    // Calculate commission owed from actual transactions, not walletBalance.
+    // walletBalance can be inflated by bonuses/top-ups — this gives the real number.
+    const [totalDebited, totalApproved, pendingPayment] = await Promise.all([
+      // Total commission charged across all completed jobs
+      this.prisma.walletTransaction.aggregate({
+        where: { workerId, type: WalletTxnType.COMMISSION_DEBIT },
+        _sum: { amount: true },
+      }),
+      // Total commission already verified and cleared by admin
+      this.prisma.commissionPayment.aggregate({
+        where: { workerId, status: CommissionPaymentStatus.APPROVED },
+        _sum: { amount: true },
+      }),
+      // Any pending submission right now
+      this.prisma.commissionPayment.findFirst({
+        where: { workerId, status: CommissionPaymentStatus.PENDING },
+        orderBy: { submittedAt: 'desc' },
+      }),
+    ]);
 
-    // Check if there is a PENDING payment already submitted
-    const pendingPayment = await this.prisma.commissionPayment.findFirst({
-      where: { workerId, status: CommissionPaymentStatus.PENDING },
-      orderBy: { submittedAt: 'desc' },
-    });
+    const totalCommissionCharged = Math.abs(Number(totalDebited._sum.amount ?? 0));
+    const totalCommissionCleared = Number(totalApproved._sum.amount ?? 0);
+    const amountDue = Math.max(0, totalCommissionCharged - totalCommissionCleared);
 
     const daysLeft = worker.commissionDueAt
       ? Math.ceil(
@@ -74,6 +91,8 @@ export class CommissionService {
 
     return {
       amountDue,
+      totalCommissionCharged,
+      totalCommissionCleared,
       commissionDueAt: worker.commissionDueAt,
       daysLeft,
       isPaymentOverdue: worker.isPaymentOverdue,
@@ -89,18 +108,15 @@ export class CommissionService {
   async submitPaymentProof(workerId: string, proofImageUrl: string) {
     const worker = await this.prisma.workerProfile.findUnique({
       where: { id: workerId },
-      select: {
-        walletBalance: true,
-        commissionDueAt: true,
-        userId: true,
-      },
+      select: { commissionDueAt: true, userId: true },
     });
     if (!worker) throw new NotFoundException('Worker not found');
 
-    const amountDue = -Number(worker.walletBalance);
-    if (amountDue <= 0) {
+    const due = await this.getDueStatus(workerId);
+    if (due.amountDue <= 0) {
       throw new BadRequestException('No commission is currently owed');
     }
+    const amountDue = due.amountDue;
 
     const existing = await this.prisma.commissionPayment.findFirst({
       where: { workerId, status: CommissionPaymentStatus.PENDING },
@@ -272,16 +288,21 @@ export class CommissionService {
    */
   async flagOverdueWorkers() {
     const now = new Date();
-    const overdueWorkers = await this.prisma.workerProfile.findMany({
+    // Find workers whose due date has passed and who haven't been flagged yet
+    const candidates = await this.prisma.workerProfile.findMany({
       where: {
         commissionDueAt: { lte: now },
-        walletBalance: { lt: 0 },
         isPaymentOverdue: false,
       },
       select: { id: true, userId: true },
     });
 
-    for (const worker of overdueWorkers) {
+    let flagged = 0;
+    for (const worker of candidates) {
+      // Verify they actually owe money (don't rely on walletBalance)
+      const due = await this.getDueStatus(worker.id);
+      if (due.amountDue <= 0) continue;
+
       await this.prisma.workerProfile.update({
         where: { id: worker.id },
         data: { isPaymentOverdue: true },
@@ -292,8 +313,9 @@ export class CommissionService {
         'Your commission payment is overdue. Please pay immediately to continue receiving bookings.',
         'COMMISSION_OVERDUE',
       );
+      flagged++;
     }
 
-    return { flagged: overdueWorkers.length };
+    return { flagged };
   }
 }

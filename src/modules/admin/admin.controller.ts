@@ -208,6 +208,17 @@ export class AdminController {
   // ==================== JOBS / BOOKINGS ====================
 
   /**
+   * Booking counts per status for dashboard metrics.
+   * GET /admin/jobs/stats
+   */
+  @Get('jobs/stats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getJobStats() {
+    return this.adminService.getJobStats();
+  }
+
+  /**
    * Get jobs/bookings with filtering and pagination.
    * GET /admin/jobs?page=1&limit=20&status=ACTIVE&search=
    */
