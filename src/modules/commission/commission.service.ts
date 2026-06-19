@@ -288,16 +288,21 @@ export class CommissionService {
    */
   async flagOverdueWorkers() {
     const now = new Date();
-    const overdueWorkers = await this.prisma.workerProfile.findMany({
+    // Find workers whose due date has passed and who haven't been flagged yet
+    const candidates = await this.prisma.workerProfile.findMany({
       where: {
         commissionDueAt: { lte: now },
-        walletBalance: { lt: 0 },
         isPaymentOverdue: false,
       },
       select: { id: true, userId: true },
     });
 
-    for (const worker of overdueWorkers) {
+    let flagged = 0;
+    for (const worker of candidates) {
+      // Verify they actually owe money (don't rely on walletBalance)
+      const due = await this.getDueStatus(worker.id);
+      if (due.amountDue <= 0) continue;
+
       await this.prisma.workerProfile.update({
         where: { id: worker.id },
         data: { isPaymentOverdue: true },
@@ -308,8 +313,9 @@ export class CommissionService {
         'Your commission payment is overdue. Please pay immediately to continue receiving bookings.',
         'COMMISSION_OVERDUE',
       );
+      flagged++;
     }
 
-    return { flagged: overdueWorkers.length };
+    return { flagged };
   }
 }
