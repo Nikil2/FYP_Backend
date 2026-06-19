@@ -16,6 +16,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { WalletService } from '../wallet/wallet.service';
 import { BonusService, BonusEvaluationResult } from '../bonus/bonus.service';
+import { CustomerRewardsService } from '../customer-rewards/customer-rewards.service';
 
 @Injectable()
 export class BookingsService {
@@ -25,6 +26,7 @@ export class BookingsService {
     private realtimeGateway: RealtimeGateway,
     private walletService: WalletService,
     private bonusService: BonusService,
+    private customerRewardsService: CustomerRewardsService,
   ) {}
 
   async createBooking(createBookingDto: CreateBookingDto) {
@@ -120,6 +122,9 @@ export class BookingsService {
       `${booking.customer.fullName} requested ${booking.service.name}.`,
       'BOOKING_REQUEST',
     );
+
+    // Award +10 points to customer for placing a booking
+    await this.customerRewardsService.onBookingCreated(customerId, booking.id);
 
     return booking;
   }
@@ -389,7 +394,10 @@ export class BookingsService {
         );
       }
 
-      // 4. bonus engine — tier recompute + rolling-20 cashback, same transaction
+      // 4. award customer completion points inside the same transaction
+      await this.customerRewardsService.onBookingCompleted(booking.customerId, bookingId, tx);
+
+      // 5. bonus engine — tier recompute + rolling-20 cashback, same transaction
       return this.bonusService.processCompletion(tx, updatedWorker);
     });
 
