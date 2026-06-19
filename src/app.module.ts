@@ -19,6 +19,8 @@ import { LocationsModule } from './modules/locations/locations.module';
 import { ScheduleModule } from './modules/schedule/schedule.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 import { BonusModule } from './modules/bonus/bonus.module';
+import { CustomerRewardsModule } from './modules/customer-rewards/customer-rewards.module';
+import { CommissionModule } from './modules/commission/commission.module';
 
 @Module({
   imports: [
@@ -36,6 +38,8 @@ import { BonusModule } from './modules/bonus/bonus.module';
     ServicesModule,
     WalletModule,
     BonusModule,
+    CustomerRewardsModule,
+    CommissionModule,
     BookingsModule,
     // Feature modules
     MessagesModule,

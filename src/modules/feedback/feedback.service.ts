@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { CustomerRewardsService } from '../customer-rewards/customer-rewards.service';
 import { CreateFeedbackDto } from './dto/create-feedback.dto';
 import { BookingStatus } from '@prisma/client';
 
@@ -15,6 +16,7 @@ export class FeedbackService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private customerRewardsService: CustomerRewardsService,
   ) {}
 
   /**
@@ -106,13 +108,16 @@ export class FeedbackService {
       return created;
     });
 
-    // Notify the worker about the new review (saved to DB + pushed via socket)
+    // Notify the worker about the new review
     await this.notificationsService.createNotification(
       booking.worker.userId,
       'New Review',
       `You received a ${dto.rating}-star review`,
       'NEW_REVIEW',
     );
+
+    // Award +5 points to customer for leaving a review
+    await this.customerRewardsService.onReviewSubmitted(userId, dto.bookingId);
 
     return feedback;
   }
