@@ -145,13 +145,19 @@ export class AiPersistenceService {
           role: { in: [AiMessageRole.USER, AiMessageRole.ASSISTANT] },
         },
         orderBy: { createdAt: 'asc' },
-        select: { role: true, content: true, createdAt: true },
+        select: { role: true, content: true, createdAt: true, metadata: true },
       });
-      return msgs.map((m) => ({
-        role: m.role === AiMessageRole.USER ? 'user' : 'assistant',
-        content: m.content,
-        createdAt: m.createdAt,
-      }));
+      return msgs.map((m) => {
+        const meta = (m.metadata as any) ?? {};
+        return {
+          role: m.role === AiMessageRole.USER ? 'user' : 'assistant',
+          content: m.content,
+          createdAt: m.createdAt,
+          // Rehydrate worker cards / action saved with the assistant turn.
+          workers: meta.workers ?? undefined,
+          action: meta.action ?? undefined,
+        };
+      });
     } catch (err: any) {
       this.logger.warn(`getMessages failed: ${err?.message}`);
       return [];

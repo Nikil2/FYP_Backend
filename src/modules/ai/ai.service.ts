@@ -129,9 +129,12 @@ export class AiService {
       response.reply,
       {
         toolUsed: response.toolUsed,
-        metadata: response.workers?.length
-          ? { workerIds: response.workers.map((w) => w.workerId) }
-          : undefined,
+        // Store the FULL worker payload + action so the history panel can
+        // rehydrate the worker cards later, not just the text.
+        metadata:
+          response.workers?.length || response.action
+            ? { workers: response.workers, action: response.action }
+            : undefined,
       },
     );
     return { ...response, conversationId };
