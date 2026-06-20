@@ -15,6 +15,7 @@ export const TOOL_NAMES = {
   GET_SERVICE_CATEGORIES: 'get_service_categories',
   GET_WORKER_DETAIL: 'get_worker_detail',
   INITIATE_BOOKING: 'initiate_booking',
+  GET_PLATFORM_INFO: 'get_platform_info',
 } as const;
 
 /** The 8 fixed service categories — surfaced in descriptions to guide the model. */
@@ -118,6 +119,41 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
           },
         },
         required: ['workerId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: TOOL_NAMES.GET_PLATFORM_INFO,
+      description:
+        'Explain how Mehnati works, its features, reward system, rules/' +
+        'policies and account management. Use when the user asks how the ' +
+        'platform works, what they can do, what features exist, how rewards/' +
+        'points/referrals/commission work, the rules or policies, or anything ' +
+        'about managing their account.',
+      parameters: {
+        type: 'object',
+        properties: {
+          topic: {
+            type: 'string',
+            enum: [
+              'customer',
+              'worker',
+              'rewards',
+              'policies',
+              'account',
+              'general',
+              'all',
+            ],
+            description:
+              "Which area to describe. Default 'customer'. Use 'worker' for " +
+              "worker features, 'rewards' for points/referrals/commission/" +
+              "bonuses, 'policies' for rules, 'account' for sign-up/login/" +
+              "password/account management, 'general' for an overview, or " +
+              "'all' for everything.",
+          },
+        },
       },
     },
   },
