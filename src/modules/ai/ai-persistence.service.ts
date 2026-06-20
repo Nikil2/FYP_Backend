@@ -100,6 +100,64 @@ export class AiPersistenceService {
     }
   }
 
+  /** List a user's recent conversations (newest first) for the history panel. */
+  async listConversations(userId: string) {
+    if (!userId) return [];
+    try {
+      const convos = await this.prisma.aiConversation.findMany({
+        where: { userId, kind: 'CUSTOMER' },
+        orderBy: { updatedAt: 'desc' },
+        take: 30,
+        include: {
+          messages: {
+            where: { role: AiMessageRole.USER },
+            orderBy: { createdAt: 'asc' },
+            take: 1,
+            select: { content: true },
+          },
+          _count: { select: { messages: true } },
+        },
+      });
+
+      return convos
+        .filter((c) => c._count.messages > 0) // skip empty shells
+        .map((c) => ({
+          id: c.id,
+          title:
+            c.title ??
+            c.messages[0]?.content?.slice(0, 60) ??
+            'New conversation',
+          messageCount: c._count.messages,
+          updatedAt: c.updatedAt,
+        }));
+    } catch (err: any) {
+      this.logger.warn(`listConversations failed: ${err?.message}`);
+      return [];
+    }
+  }
+
+  /** Full USER/ASSISTANT transcript of one conversation, oldest first. */
+  async getMessages(conversationId: string) {
+    try {
+      const msgs = await this.prisma.aiChatMessage.findMany({
+        where: {
+          conversationId,
+          role: { in: [AiMessageRole.USER, AiMessageRole.ASSISTANT] },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { role: true, content: true, createdAt: true },
+      });
+      return msgs.map((m) => ({
+        role: m.role === AiMessageRole.USER ? 'user' : 'assistant',
+        content: m.content,
+        createdAt: m.createdAt,
+      }));
+    } catch (err: any) {
+      this.logger.warn(`getMessages failed: ${err?.message}`);
+      return [];
+    }
+  }
+
   /** Only return a userId that actually exists, to satisfy the FK. */
   private async resolveUserId(
     userId: string | undefined,
