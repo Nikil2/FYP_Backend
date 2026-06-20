@@ -21,6 +21,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
 import { BonusModule } from './modules/bonus/bonus.module';
 import { CustomerRewardsModule } from './modules/customer-rewards/customer-rewards.module';
 import { CommissionModule } from './modules/commission/commission.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -50,6 +51,8 @@ import { CommissionModule } from './modules/commission/commission.module';
     // Supporting modules
     LocationsModule,
     ScheduleModule,
+    // AI
+    AiModule,
     // Admin
     AdminModule,
   ],
