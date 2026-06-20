@@ -24,7 +24,16 @@ export async function findCandidateWorkers(
     verificationStatus: VerificationStatus.APPROVED,
     services: {
       some: {
-        service: { name: { contains: q.service, mode: 'insensitive' } },
+        // The AI sends a top-level category (e.g. "Electrician", "AC
+        // Technician"), but Service.name holds granular sub-services
+        // ("Wiring & Rewiring"). Match the category first, fall back to the
+        // sub-service name so both "Electrician" and "Leak Repair" work.
+        service: {
+          OR: [
+            { categoryName: { contains: q.service, mode: 'insensitive' } },
+            { name: { contains: q.service, mode: 'insensitive' } },
+          ],
+        },
       },
     },
   };
