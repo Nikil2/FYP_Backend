@@ -127,19 +127,31 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: TOOL_NAMES.GET_PLATFORM_INFO,
       description:
-        'Explain how Mehnati works and list its features. Use when the user ' +
-        "asks how the platform works, what they can do, what features exist, " +
-        'or specifically what a customer or worker can do.',
+        'Explain how Mehnati works, its features, reward system, rules/' +
+        'policies and account management. Use when the user asks how the ' +
+        'platform works, what they can do, what features exist, how rewards/' +
+        'points/referrals/commission work, the rules or policies, or anything ' +
+        'about managing their account.',
       parameters: {
         type: 'object',
         properties: {
           topic: {
             type: 'string',
-            enum: ['customer', 'worker', 'general', 'all'],
+            enum: [
+              'customer',
+              'worker',
+              'rewards',
+              'policies',
+              'account',
+              'general',
+              'all',
+            ],
             description:
-              "Which audience to describe. Default 'customer'. Use 'worker' " +
-              "for worker-side features, 'general' for an overview, 'all' for " +
-              'everything.',
+              "Which area to describe. Default 'customer'. Use 'worker' for " +
+              "worker features, 'rewards' for points/referrals/commission/" +
+              "bonuses, 'policies' for rules, 'account' for sign-up/login/" +
+              "password/account management, 'general' for an overview, or " +
+              "'all' for everything.",
           },
         },
       },
