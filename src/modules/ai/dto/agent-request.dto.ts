@@ -33,4 +33,9 @@ export class AgentRequestDto {
   @IsOptional()
   @IsString()
   userId?: string;
+
+  /** Existing conversation to continue; omit to start a new one. */
+  @IsOptional()
+  @IsString()
+  conversationId?: string;
 }

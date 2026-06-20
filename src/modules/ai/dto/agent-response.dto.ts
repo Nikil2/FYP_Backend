@@ -12,4 +12,7 @@ export class AgentResponseDto {
 
   /** Optional frontend navigation, e.g. "redirect:/customer/book/2?workerId=ab". */
   action?: string | null;
+
+  /** Conversation id to send back on the next turn (continues the thread). */
+  conversationId?: string | null;
 }
