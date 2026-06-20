@@ -40,6 +40,8 @@ USING TOOLS (very important):
   - search/recommend need at least a service (and ideally a city).
 - If the customer describes a problem but not a category (e.g. "fix my geyser",
   "my fan is broken"), call get_service_categories, then suggest the right one.
+- If the customer asks how Mehnati works, what they can do, or what features
+  exist, call get_platform_info and summarise the result.
 - After showing workers, offer to show more detail or start a booking.
 - Only call initiate_booking when the customer clearly picks a specific worker.
 

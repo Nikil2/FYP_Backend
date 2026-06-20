@@ -15,6 +15,7 @@ export const TOOL_NAMES = {
   GET_SERVICE_CATEGORIES: 'get_service_categories',
   GET_WORKER_DETAIL: 'get_worker_detail',
   INITIATE_BOOKING: 'initiate_booking',
+  GET_PLATFORM_INFO: 'get_platform_info',
 } as const;
 
 /** The 8 fixed service categories — surfaced in descriptions to guide the model. */
@@ -118,6 +119,29 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
           },
         },
         required: ['workerId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: TOOL_NAMES.GET_PLATFORM_INFO,
+      description:
+        'Explain how Mehnati works and list its features. Use when the user ' +
+        "asks how the platform works, what they can do, what features exist, " +
+        'or specifically what a customer or worker can do.',
+      parameters: {
+        type: 'object',
+        properties: {
+          topic: {
+            type: 'string',
+            enum: ['customer', 'worker', 'general', 'all'],
+            description:
+              "Which audience to describe. Default 'customer'. Use 'worker' " +
+              "for worker-side features, 'general' for an overview, 'all' for " +
+              'everything.',
+          },
+        },
       },
     },
   },

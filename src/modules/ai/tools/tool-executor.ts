@@ -10,6 +10,7 @@ import { recommendWorkers } from './recommend-workers.tool';
 import { getServiceCategories } from './get-categories.tool';
 import { getWorkerDetail } from './get-worker-detail.tool';
 import { initiateBooking } from './initiate-booking.tool';
+import { getPlatformInfo } from './get-platform-info.tool';
 
 /**
  * Maps an LLM tool call (name + parsed arguments) to its real implementation.
@@ -61,6 +62,9 @@ export class ToolExecutor {
 
         case TOOL_NAMES.INITIATE_BOOKING:
           return await initiateBooking(this.deps, args as any);
+
+        case TOOL_NAMES.GET_PLATFORM_INFO:
+          return await getPlatformInfo(this.deps, args as any);
 
         default:
           this.logger.warn(`Unknown tool requested: ${name}`);
