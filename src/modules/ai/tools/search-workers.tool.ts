@@ -93,8 +93,10 @@ export async function searchWorkers(
         city: w.city,
         averageRating: w.averageRating,
         totalJobsCompleted: w.totalJobsCompleted,
-        visitingCharges: w.visitingCharges,
-        services: w.services.map((s) => s.name),
+        // Visiting charge is the fixed call-out fee; each service has its own
+        // price. Send both so the model can quote accurate pricing.
+        visitingChargesPkr: w.visitingCharges,
+        services: w.services.map((s) => ({ name: s.name, pricePkr: s.price })),
       })),
       note:
         workers.length === 0
