@@ -27,7 +27,10 @@ export class GroqProvider implements LlmProvider {
       apiKey: process.env.GROQ_API_KEY,
       timeout: Number(process.env.AI_REQUEST_TIMEOUT_MS ?? 30000),
     });
-    this.model = process.env.GROQ_MODEL ?? 'llama-3.1-8b-instant';
+    // gpt-oss-120b is far more reliable at structured tool-calling than the
+    // small Llama models (which leak `<function=...>` markup into the reply and
+    // hallucinate missing args). Override with GROQ_MODEL if needed.
+    this.model = process.env.GROQ_MODEL ?? 'openai/gpt-oss-120b';
     this.timeoutMs = Number(process.env.AI_REQUEST_TIMEOUT_MS ?? 30000);
   }
 
@@ -81,13 +84,66 @@ export class GroqProvider implements LlmProvider {
       arguments: this.safeParse(tc.function.arguments),
     }));
 
+    // Smaller Llama models sometimes emit the tool call as TEXT in `content`
+    // (e.g. `<function=search_workers>{"service":"AC Technician"}</function>`)
+    // instead of the structured tool_calls field. If we didn't get a proper
+    // tool call but the content looks like one, recover it so the raw markup
+    // never leaks to the user.
+    let content = choice.content ?? null;
+    if (toolCalls.length === 0 && content) {
+      const recovered = this.extractInlineToolCalls(content);
+      if (recovered.calls.length) {
+        toolCalls.push(...recovered.calls);
+        content = recovered.cleanedContent || null;
+      }
+    }
+
     const assistantMessage: ChatMessage = {
       role: 'assistant',
-      content: choice.content ?? null,
-      tool_calls: choice.tool_calls as any,
+      content,
+      // Re-advertise recovered calls in OpenAI shape so the next turn's
+      // tool messages line up with valid tool_call ids.
+      tool_calls: (choice.tool_calls as any) ?? this.toOpenAiToolCalls(toolCalls),
     };
 
-    return { content: choice.content ?? null, toolCalls, assistantMessage };
+    return { content, toolCalls, assistantMessage };
+  }
+
+  /**
+   * Recover tool calls a weak model embedded in plain text. Handles the two
+   * formats Llama produces: `<function=NAME>{json}</function>` and a bare
+   * `{"name":"NAME","arguments":{...}}` blob. Returns the parsed calls plus the
+   * content with that markup stripped out.
+   */
+  private extractInlineToolCalls(text: string): {
+    calls: ParsedToolCall[];
+    cleanedContent: string;
+  } {
+    const calls: ParsedToolCall[] = [];
+    let cleaned = text;
+
+    const fnRegex = /<function=([\w-]+)>\s*(\{[\s\S]*?\})\s*<\/function>/g;
+    let match: RegExpExecArray | null;
+    while ((match = fnRegex.exec(text)) !== null) {
+      calls.push({
+        id: `inline_${calls.length}_${Date.now()}`,
+        name: match[1],
+        arguments: this.safeParse(match[2]),
+      });
+      cleaned = cleaned.replace(match[0], '');
+    }
+
+    return { calls, cleanedContent: cleaned.trim() };
+  }
+
+  /** Build OpenAI-shaped tool_calls from our parsed calls (for recovered ones). */
+  private toOpenAiToolCalls(calls: ParsedToolCall[]): any[] | undefined {
+    if (!calls.length) return undefined;
+    return calls.map((c) => ({
+      id: c.id,
+      type: 'function',
+      function: { name: c.name, arguments: JSON.stringify(c.arguments) },
+    }));
   }
 
   /** True when Groq rejected a badly-formatted tool call (400 tool_use_failed). */
