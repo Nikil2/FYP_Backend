@@ -4,6 +4,8 @@ import { WorkersModule } from '../workers/workers.module';
 import { ServicesModule } from '../services/services.module';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
+import { OnboardingService } from './onboarding.service';
+import { TranscriptionService } from './transcription.service';
 import { AiPersistenceService } from './ai-persistence.service';
 import { ToolExecutor } from './tools/tool-executor';
 import { LLM_PROVIDER } from './providers/llm-provider.interface';
@@ -22,6 +24,8 @@ import { OllamaProvider } from './providers/ollama.provider';
   controllers: [AiController],
   providers: [
     AiService,
+    OnboardingService,
+    TranscriptionService,
     AiPersistenceService,
     ToolExecutor,
     GroqProvider,
