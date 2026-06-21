@@ -25,7 +25,7 @@ export interface AiWorker {
   totalJobsCompleted: number;
   visitingCharges: number;
   rankingScore: number;
-  services: { id: number; name: string }[];
+  services: { id: number; name: string; price: number }[];
   reason?: string;
 }
 

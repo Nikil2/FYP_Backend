@@ -41,6 +41,7 @@ export function toAiWorker(profile: any): AiWorker {
     services: (profile.services ?? []).map((ws: any) => ({
       id: ws.service.id,
       name: ws.service.name,
+      price: parseFloat(String(ws.price ?? 0)),
     })),
   };
 }
