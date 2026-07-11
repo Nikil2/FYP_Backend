@@ -14,14 +14,38 @@ import { findCandidateWorkers } from './tools/search-workers.tool';
 import { getPlatformInfo } from './tools/get-platform-info.tool';
 import { ToolDeps } from './tools/tool-types';
 
-/** Required chat-collected fields → friendly label for the "still missing" list. */
-const REQUIRED_FIELDS: { key: keyof OnboardingProfileDto; label: string }[] = [
-  { key: 'fullName', label: 'your full name' },
-  { key: 'services', label: 'the work you do and a price for each' },
-  { key: 'experienceYears', label: 'your years of experience' },
-  { key: 'visitingCharges', label: 'your visiting charge' },
-  { key: 'city', label: 'your city' },
-  { key: 'bio', label: 'a short bio (just tell me about your work)' },
+/**
+ * Required chat-collected fields → friendly label for the "still missing" list,
+ * plus a Roman-Urdu question used by the deterministic fallback reply when the
+ * LLM is unavailable.
+ */
+const REQUIRED_FIELDS: {
+  key: keyof OnboardingProfileDto;
+  label: string;
+  ask: string;
+}[] = [
+  { key: 'fullName', label: 'your full name', ask: 'Aap ka poora naam kya hai?' },
+  {
+    key: 'services',
+    label: 'the work you do and a price for each',
+    ask: 'Aap kaun kaun se kaam karte hain, aur har kaam ki price (PKR) kya hai?',
+  },
+  {
+    key: 'experienceYears',
+    label: 'your years of experience',
+    ask: 'Aap ko kitne saal ka tajurba hai?',
+  },
+  {
+    key: 'visitingCharges',
+    label: 'your visiting charge',
+    ask: 'Aap ki visiting charge (site pe aane ki fixed fees) kitni hai?',
+  },
+  { key: 'city', label: 'your city', ask: 'Aap kis shehar mein kaam karte hain?' },
+  {
+    key: 'bio',
+    label: 'a short bio (just tell me about your work)',
+    ask: 'Thoda apne kaam ke baare mein batayein — main aap ke liye bio likh dunga.',
+  },
 ];
 
 /**
@@ -36,7 +60,7 @@ const REQUIRED_FIELDS: { key: keyof OnboardingProfileDto; label: string }[] = [
 @Injectable()
 export class OnboardingService {
   private readonly logger = new Logger(OnboardingService.name);
-  private readonly maxRounds = Number(process.env.AI_MAX_TOOL_ROUNDS ?? 4);
+  private readonly maxRounds = Number(process.env.AI_MAX_TOOL_ROUNDS ?? 6);
 
   constructor(
     @Inject(LLM_PROVIDER) private readonly llm: LlmProvider,
@@ -59,34 +83,82 @@ export class OnboardingService {
 
     let reply = '';
 
-    for (let round = 0; round < this.maxRounds; round++) {
-      const result = await this.llm.chat({ messages, tools: TOOL_DEFS });
+    // Any LLM failure here must NOT discard the profile we've already merged —
+    // otherwise the client keeps its stale profile and Nova re-asks everything.
+    try {
+      for (let round = 0; round < this.maxRounds; round++) {
+        const result = await this.llm.chat({ messages, tools: TOOL_DEFS });
 
-      if (!result.toolCalls?.length) {
-        reply = result.content ?? '';
-        break;
+        if (!result.toolCalls?.length) {
+          reply = result.content ?? '';
+          break;
+        }
+
+        messages.push(result.assistantMessage);
+        for (const call of result.toolCalls) {
+          const data = await this.dispatch(call.name, call.arguments ?? {}, profile);
+          messages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            name: call.name,
+            content: JSON.stringify(data),
+          });
+        }
       }
 
-      messages.push(result.assistantMessage);
-      for (const call of result.toolCalls) {
-        const data = await this.dispatch(call.name, call.arguments ?? {}, profile);
-        messages.push({
-          role: 'tool',
-          tool_call_id: call.id,
-          name: call.name,
-          content: JSON.stringify(data),
-        });
+      if (!reply) {
+        // Hit the round cap mid-tool-loop — force a clean text reply.
+        reply = await this.forceTextReply(messages, profile);
       }
-    }
-
-    if (!reply) {
-      // Hit the round cap mid-tool-loop — ask once more, no tools, for clean text.
-      const final = await this.llm.chat({ messages, tools: [] });
-      reply = final.content ?? 'Theek hai, batayein — aap kya kaam karte hain?';
+    } catch (err: any) {
+      this.logger.error(`onboarding LLM loop failed: ${err?.message}`);
+      reply = this.fallbackReply(profile);
     }
 
     const missing = this.missingFields(profile);
     return { reply, profile, missing, complete: missing.length === 0 };
+  }
+
+  /**
+   * Coax a plain-text reply out of the model after the tool loop. gpt-oss
+   * sometimes still emits a tool call even with tools stripped, which Groq
+   * rejects (400 tool_use_failed / "tool choice is none, but model called a
+   * tool"). We add an explicit no-tools instruction and, if it still fails,
+   * fall back to a deterministic prompt instead of crashing.
+   */
+  private async forceTextReply(
+    messages: ChatMessage[],
+    profile: OnboardingProfileDto,
+  ): Promise<string> {
+    const guarded: ChatMessage[] = [
+      ...messages,
+      {
+        role: 'system',
+        content:
+          'Do NOT call any tool now. Reply to the worker in plain text only: ' +
+          'briefly confirm what you saved, then ask for the next missing detail.',
+      },
+    ];
+    try {
+      const final = await this.llm.chat({ messages: guarded, tools: [] });
+      if (final.content?.trim()) return final.content.trim();
+    } catch (err: any) {
+      this.logger.warn(`onboarding forced text reply failed: ${err?.message}`);
+    }
+    return this.fallbackReply(profile);
+  }
+
+  /** Deterministic reply built from profile state — never touches the LLM. */
+  private fallbackReply(profile: OnboardingProfileDto): string {
+    const missing = this.missingFieldDefs(profile);
+    if (!missing.length) {
+      return (
+        'Bohot khoob! Aap ki saari maloomat mil gayi hai. ✅ ' +
+        'Aakhri step: kuch tasveerein (kaam ki, selfie, CNIC) aur ek password — ' +
+        'ye camera se jaldi ho jayega.'
+      );
+    }
+    return `Theek hai, shukriya. ${missing[0].ask}`;
   }
 
   // ─── Tool dispatch (stateful: mutates `profile`) ───────────────────────────
@@ -137,9 +209,16 @@ export class OnboardingService {
   private async recordDetails(
     args: {
       fullName?: string;
-      services?: { name: string; price?: number }[];
+      // The model varies the shape: services can be objects or bare strings,
+      // and it may use singular/alternate keys. Accept them all defensively.
+      services?: (
+        | string
+        | { name?: string; service?: string; price?: number }
+      )[];
       experienceYears?: number;
+      experience?: number;
       visitingCharges?: number;
+      visitingCharge?: number;
       homeAddress?: string;
       city?: string;
       bio?: string;
@@ -147,19 +226,25 @@ export class OnboardingService {
     profile: OnboardingProfileDto,
   ): Promise<Record<string, any>> {
     if (args.fullName) profile.fullName = args.fullName.trim();
-    if (typeof args.experienceYears === 'number')
-      profile.experienceYears = args.experienceYears;
-    if (typeof args.visitingCharges === 'number')
-      profile.visitingCharges = args.visitingCharges;
+
+    const experienceYears = args.experienceYears ?? args.experience;
+    if (typeof experienceYears === 'number')
+      profile.experienceYears = experienceYears;
+
+    const visitingCharges = args.visitingCharges ?? args.visitingCharge;
+    if (typeof visitingCharges === 'number')
+      profile.visitingCharges = visitingCharges;
+
     if (args.homeAddress) profile.homeAddress = args.homeAddress.trim();
     if (args.city) profile.city = args.city.trim();
     if (args.bio) profile.bio = args.bio.trim();
 
     const unmatched: string[] = [];
-    if (args.services?.length) {
+    const incomingServices = normalizeServices(args.services);
+    if (incomingServices.length) {
       const catalogue = await this.servicesService.getActiveServices();
       profile.services = profile.services ?? [];
-      for (const incoming of args.services) {
+      for (const incoming of incomingServices) {
         const match = resolveService(catalogue, incoming.name);
         if (!match) {
           unmatched.push(incoming.name);
@@ -224,16 +309,28 @@ export class OnboardingService {
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
   private missingFields(profile: OnboardingProfileDto): string[] {
-    return REQUIRED_FIELDS.filter(({ key }) => {
-      const v = profile[key];
-      if (key === 'services') {
-        const list = v as OnboardingProfileDto['services'];
-        return !list?.length || list.some((s) => s.price <= 0);
-      }
-      if (key === 'experienceYears') return typeof v !== 'number';
-      if (key === 'visitingCharges') return typeof v !== 'number' || (v as number) <= 0;
-      return !v;
-    }).map(({ label }) => label);
+    return this.missingFieldDefs(profile).map(({ label }) => label);
+  }
+
+  /** The required-field definitions still unfilled, in order. */
+  private missingFieldDefs(
+    profile: OnboardingProfileDto,
+  ): (typeof REQUIRED_FIELDS)[number][] {
+    return REQUIRED_FIELDS.filter(({ key }) => this.isFieldMissing(key, profile));
+  }
+
+  private isFieldMissing(
+    key: keyof OnboardingProfileDto,
+    profile: OnboardingProfileDto,
+  ): boolean {
+    const v = profile[key];
+    if (key === 'services') {
+      const list = v as OnboardingProfileDto['services'];
+      return !list?.length || list.some((s) => s.price <= 0);
+    }
+    if (key === 'experienceYears') return typeof v !== 'number';
+    if (key === 'visitingCharges') return typeof v !== 'number' || (v as number) <= 0;
+    return !v;
   }
 
   /** A short system note so the model knows what's already collected. */
@@ -260,6 +357,34 @@ export class OnboardingService {
 }
 
 // ─── Pure helpers ──────────────────────────────────────────────────────────
+
+/**
+ * The model sends services in wildly varying shapes: an array of objects
+ * (`{name, price}`), an array of bare strings (`"Wiring & Rewiring"`), or with a
+ * `service` key instead of `name`. Coerce everything into `{name, price?}` so a
+ * whole services list is never silently dropped.
+ */
+function normalizeServices(
+  raw: (string | { name?: string; service?: string; price?: number })[] | undefined,
+): { name: string; price?: number }[] {
+  if (!raw?.length) return [];
+  const out: { name: string; price?: number }[] = [];
+  for (const item of raw) {
+    if (typeof item === 'string') {
+      const name = item.trim();
+      if (name) out.push({ name });
+    } else if (item && typeof item === 'object') {
+      const name = (item.name ?? item.service ?? '').trim();
+      if (name) {
+        out.push({
+          name,
+          price: typeof item.price === 'number' ? item.price : undefined,
+        });
+      }
+    }
+  }
+  return out;
+}
 
 function resolveService(
   catalogue: { id: number; name: string; categoryName: string }[],
