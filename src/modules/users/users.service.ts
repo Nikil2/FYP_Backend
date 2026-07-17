@@ -72,6 +72,42 @@ export class UsersService {
   }
 
   /**
+   * Start the AI-first worker signup: verify the (dummy) OTP and create the
+   * "soft" worker account — a User row with role WORKER and a placeholder name.
+   * Nova fills in the real name and the WorkerProfile afterwards, over chat.
+   */
+  async startWorkerSignup(dto: {
+    phoneNumber: string;
+    password: string;
+    otp: string;
+  }): Promise<{ user: UserResponseDto; token: string }> {
+    if (dto.otp !== '000000') {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+
+    const existingUser = await this.findUserByPhone(dto.phoneNumber);
+    if (existingUser) {
+      throw new ConflictException(
+        `An account with phone number ${dto.phoneNumber} already exists`,
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const user = await this.prisma.user.create({
+      data: {
+        phoneNumber: dto.phoneNumber,
+        password: hashedPassword,
+        fullName: '', // placeholder — Nova sets the real name during onboarding
+        role: UserRole.WORKER,
+        isVerified: false,
+      },
+    });
+
+    const token = await this.generateToken(user);
+    return { user: this.mapToResponseDto(user), token };
+  }
+
+  /**
    * Login user with phone and password
    * Returns user data with JWT token
    */

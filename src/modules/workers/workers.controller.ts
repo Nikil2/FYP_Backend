@@ -17,6 +17,7 @@ import {
   WorkerResponseDto,
   UpdateOnlineStatusResponseDto,
 } from './dto';
+import { CompleteWorkerProfileDto } from './dto/complete-worker-profile.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -39,6 +40,21 @@ export class WorkersController {
     @Body() createWorkerDto: CreateWorkerDto,
   ): Promise<WorkerResponseDto> {
     return this.workersService.registerWorker(createWorkerDto);
+  }
+
+  /**
+   * Complete a soft worker account (from the AI onboarding flow) into a full
+   * WorkerProfile. Authenticated — the userId comes from the JWT.
+   * POST /workers/complete-profile
+   */
+  @Post('complete-profile')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.CREATED)
+  async completeWorkerProfile(
+    @CurrentUser('sub') userId: string,
+    @Body() dto: CompleteWorkerProfileDto,
+  ): Promise<WorkerResponseDto> {
+    return this.workersService.completeWorkerProfile(userId, dto);
   }
 
   /**

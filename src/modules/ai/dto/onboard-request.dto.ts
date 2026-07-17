@@ -1,9 +1,12 @@
 import {
   IsArray,
   IsIn,
+  IsLatitude,
+  IsLongitude,
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
   Min,
   ValidateNested,
@@ -62,6 +65,37 @@ export class OnboardingProfileDto {
   @IsOptional()
   @IsString()
   bio?: string;
+
+  // ── Captured via inline chat widgets (location + photos), not the LLM ──
+
+  @IsOptional()
+  @IsString()
+  cnicNumber?: string;
+
+  @IsOptional()
+  @IsUrl()
+  cnicFrontUrl?: string;
+
+  @IsOptional()
+  @IsUrl()
+  cnicBackUrl?: string;
+
+  @IsOptional()
+  @IsUrl()
+  selfieUrl?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsUrl({}, { each: true })
+  workPhotosUrls?: string[];
+
+  @IsOptional()
+  @IsLatitude()
+  homeLat?: number;
+
+  @IsOptional()
+  @IsLongitude()
+  homeLng?: number;
 }
 
 export class OnboardRequestDto {

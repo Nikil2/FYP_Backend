@@ -8,9 +8,13 @@ import {
   HttpCode,
   HttpStatus,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AiService } from './ai.service';
 import { OnboardingService } from './onboarding.service';
 import { TranscriptionService } from './transcription.service';
@@ -63,6 +67,22 @@ export class AiController {
   ): Promise<{ text: string }> {
     const text = await this.transcription.transcribe(audio);
     return { text };
+  }
+
+  /**
+   * Upload one inline onboarding image (CNIC front/back, selfie, work photo).
+   * Authenticated with the soft-account token created at signup start.
+   * POST /ai/onboard/upload-image  (multipart/form-data, field "image")
+   */
+  @Post('onboard/upload-image')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('image', { storage: memoryStorage() }))
+  async uploadOnboardingImage(
+    @CurrentUser('sub') userId: string,
+    @UploadedFile() image: Express.Multer.File,
+  ): Promise<{ url: string }> {
+    return this.onboardingService.uploadImage(image, userId);
   }
 
   /**

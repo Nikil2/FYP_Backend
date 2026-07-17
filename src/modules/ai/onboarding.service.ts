@@ -1,5 +1,11 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { uploadToCloudinary } from '../../common/utils/cloudinary.util';
 import { ServicesService } from '../services/services.service';
 import {
   LLM_PROVIDER,
@@ -9,42 +15,83 @@ import {
 } from './providers/llm-provider.interface';
 import { WORKER_ONBOARDING_PROMPT } from './prompts/onboarding-prompt';
 import { OnboardRequestDto, OnboardingProfileDto } from './dto/onboard-request.dto';
-import { OnboardResponseDto } from './dto/onboard-response.dto';
+import {
+  OnboardResponseDto,
+  OnboardingAwaiting,
+} from './dto/onboard-response.dto';
 import { findCandidateWorkers } from './tools/search-workers.tool';
 import { getPlatformInfo } from './tools/get-platform-info.tool';
 import { ToolDeps } from './tools/tool-types';
 
 /**
- * Required chat-collected fields → friendly label for the "still missing" list,
- * plus a Roman-Urdu question used by the deterministic fallback reply when the
- * LLM is unavailable.
+ * The ordered onboarding checklist. Each step is either a TEXT step (Nova asks
+ * and the LLM saves it) or a CAPTURE step (`capture` set — the client renders an
+ * inline widget: current-location or camera). `done` decides if the step is
+ * satisfied from the profile gathered so far; `ask` is the Roman-Urdu prompt
+ * used by the deterministic fallback when the LLM is unavailable.
+ *
+ * Order matters: `awaiting`/`missing` walk this list top-to-bottom, so the first
+ * unfinished step drives what happens next.
  */
-const REQUIRED_FIELDS: {
-  key: keyof OnboardingProfileDto;
+type OnboardingStep = {
   label: string;
   ask: string;
-}[] = [
-  { key: 'fullName', label: 'your full name', ask: 'Aap ka poora naam kya hai?' },
+  capture?: OnboardingAwaiting; // undefined => plain text step
+  done: (p: OnboardingProfileDto) => boolean;
+};
+
+const STEPS: OnboardingStep[] = [
   {
-    key: 'services',
+    label: 'your full name',
+    ask: 'Aap ka poora naam kya hai?',
+    done: (p) => !!p.fullName,
+  },
+  {
     label: 'the work you do and a price for each',
     ask: 'Aap kaun kaun se kaam karte hain, aur har kaam ki price (PKR) kya hai?',
+    done: (p) => !!p.services?.length && p.services.every((s) => s.price > 0),
   },
   {
-    key: 'experienceYears',
     label: 'your years of experience',
     ask: 'Aap ko kitne saal ka tajurba hai?',
+    done: (p) => typeof p.experienceYears === 'number',
   },
   {
-    key: 'visitingCharges',
     label: 'your visiting charge',
     ask: 'Aap ki visiting charge (site pe aane ki fixed fees) kitni hai?',
+    done: (p) => typeof p.visitingCharges === 'number' && p.visitingCharges > 0,
   },
-  { key: 'city', label: 'your city', ask: 'Aap kis shehar mein kaam karte hain?' },
   {
-    key: 'bio',
+    label: 'your work location',
+    ask: 'Ab apni location share karein — neeche jo button aaye ga use dabayein.',
+    capture: 'location',
+    done: (p) =>
+      typeof p.homeLat === 'number' &&
+      typeof p.homeLng === 'number' &&
+      !!p.homeAddress,
+  },
+  {
+    label: 'your CNIC number and its front & back photos',
+    ask: 'Apna CNIC number aur CNIC ki dono taraf ki tasveerein — button se lagayein.',
+    capture: 'cnic',
+    done: (p) => !!p.cnicNumber && !!p.cnicFrontUrl && !!p.cnicBackUrl,
+  },
+  {
+    label: 'a selfie',
+    ask: 'Ek selfie le lein — camera button dabayein.',
+    capture: 'selfie',
+    done: (p) => !!p.selfieUrl,
+  },
+  {
+    label: 'a few photos of your work',
+    ask: 'Apne kaam ki 1-2 tasveerein lagayein — button se.',
+    capture: 'workPhotos',
+    done: (p) => !!p.workPhotosUrls?.length,
+  },
+  {
     label: 'a short bio (just tell me about your work)',
     ask: 'Thoda apne kaam ke baare mein batayein — main aap ke liye bio likh dunga.',
+    done: (p) => !!p.bio,
   },
 ];
 
@@ -73,6 +120,7 @@ export class OnboardingService {
 
     const messages: ChatMessage[] = [
       { role: 'system', content: WORKER_ONBOARDING_PROMPT },
+      { role: 'system', content: await this.categoriesContext() },
       { role: 'system', content: this.profileContext(profile) },
       ...(dto.history ?? []).slice(-12).map((t) => ({
         role: t.role,
@@ -116,7 +164,13 @@ export class OnboardingService {
     }
 
     const missing = this.missingFields(profile);
-    return { reply, profile, missing, complete: missing.length === 0 };
+    return {
+      reply,
+      profile,
+      missing,
+      awaiting: this.computeAwaiting(profile),
+      complete: missing.length === 0,
+    };
   }
 
   /**
@@ -306,31 +360,66 @@ export class OnboardingService {
     };
   }
 
+  /**
+   * Upload one inline onboarding image (CNIC front/back, selfie, work photo) to
+   * Cloudinary and return its URL. Called before the WorkerProfile exists, so it
+   * just returns a URL the client stores in the profile until completion.
+   */
+  async uploadImage(
+    file: { buffer: Buffer } | undefined,
+    userId: string,
+  ): Promise<{ url: string }> {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('No image received.');
+    }
+    const result = await uploadToCloudinary(
+      { buffer: file.buffer },
+      `onboarding/${userId}`,
+    );
+    return { url: result.secure_url };
+  }
+
   // ─── Helpers ───────────────────────────────────────────────────────────────
 
   private missingFields(profile: OnboardingProfileDto): string[] {
     return this.missingFieldDefs(profile).map(({ label }) => label);
   }
 
-  /** The required-field definitions still unfilled, in order. */
-  private missingFieldDefs(
-    profile: OnboardingProfileDto,
-  ): (typeof REQUIRED_FIELDS)[number][] {
-    return REQUIRED_FIELDS.filter(({ key }) => this.isFieldMissing(key, profile));
+  /** The checklist steps still unfinished, in order. */
+  private missingFieldDefs(profile: OnboardingProfileDto): OnboardingStep[] {
+    return STEPS.filter((step) => !step.done(profile));
   }
 
-  private isFieldMissing(
-    key: keyof OnboardingProfileDto,
-    profile: OnboardingProfileDto,
-  ): boolean {
-    const v = profile[key];
-    if (key === 'services') {
-      const list = v as OnboardingProfileDto['services'];
-      return !list?.length || list.some((s) => s.price <= 0);
+  /**
+   * The inline widget the client should show next. Walks the ordered checklist:
+   * if the first unfinished step is a CAPTURE step, return its widget type;
+   * otherwise Nova is still gathering typed fields, so return 'text'.
+   */
+  private computeAwaiting(profile: OnboardingProfileDto): OnboardingAwaiting {
+    const next = this.missingFieldDefs(profile)[0];
+    return next?.capture ?? 'text';
+  }
+
+  /**
+   * Live service categories injected each turn so Nova asks the trade question
+   * with the REAL, current Mehnati categories (no hardcoded list to drift from
+   * the DB). One cheap query; the model still uses list_services to map a
+   * spoken trade to a specific service.
+   */
+  private async categoriesContext(): Promise<string> {
+    const services = await this.servicesService.getActiveServices();
+    const categories = Array.from(
+      new Set(services.map((s) => s.categoryName ?? s.name)),
+    );
+    if (!categories.length) {
+      return 'Mehnati service categories are unavailable right now — ask the worker to describe their trade in their own words.';
     }
-    if (key === 'experienceYears') return typeof v !== 'number';
-    if (key === 'visitingCharges') return typeof v !== 'number' || (v as number) <= 0;
-    return !v;
+    return (
+      'These are the ONLY Mehnati service categories available right now. ' +
+      'When you ask the worker what work they do, offer these exact options ' +
+      '(do not invent or omit any):\n' +
+      categories.join(', ')
+    );
   }
 
   /** A short system note so the model knows what's already collected. */
