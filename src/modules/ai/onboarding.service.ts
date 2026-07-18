@@ -325,11 +325,20 @@ export class OnboardingService {
       }
     }
 
+    const servicesNeedingPrice = (profile.services ?? [])
+      .filter((s) => !(s.price > 0))
+      .map((s) => s.name);
+
     return {
       saved: true,
       profile,
       missing: this.missingFields(profile),
       unmatchedServices: unmatched.length ? unmatched : undefined,
+      // Concrete names, not just the generic "missing" label — the model must
+      // keep asking prices one by one until this list is empty before moving on.
+      servicesNeedingPrice: servicesNeedingPrice.length
+        ? servicesNeedingPrice
+        : undefined,
     };
   }
 
