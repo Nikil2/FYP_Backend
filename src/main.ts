@@ -20,6 +20,7 @@ async function bootstrap() {
       process.env.FRONTEND_URL || 'http://localhost:3000',
       'https://mehanti.up.railway.app',
       'https://fyp-frontend-beta.vercel.app',
+      'https://fypbackend-production-f65e.up.railway.app',
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
