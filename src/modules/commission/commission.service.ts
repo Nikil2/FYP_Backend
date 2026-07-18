@@ -283,6 +283,112 @@ export class CommissionService {
   }
 
   /**
+   * Flag a single worker if their due date has passed and they still owe money.
+   *
+   * Called when the worker opens their own wallet, so the overdue banner and
+   * notification fire even if no admin has run a sweep. Kept separate from
+   * `getDueStatus` so that stays a pure read (the sweep depends on it).
+   */
+  async flagWorkerIfOverdue(workerId: string) {
+    const worker = await this.prisma.workerProfile.findUnique({
+      where: { id: workerId },
+      select: { id: true, userId: true, commissionDueAt: true, isPaymentOverdue: true },
+    });
+
+    if (!worker) return;
+    if (worker.isPaymentOverdue) return; // already flagged
+    if (!worker.commissionDueAt) return; // clock never started
+    if (new Date(worker.commissionDueAt).getTime() > Date.now()) return; // not yet due
+
+    const due = await this.getDueStatus(workerId);
+    if (due.amountDue <= 0) return; // nothing actually owed
+
+    await this.prisma.workerProfile.update({
+      where: { id: workerId },
+      data: { isPaymentOverdue: true },
+    });
+
+    await this.notificationsService.createNotification(
+      worker.userId,
+      'Commission Overdue',
+      'Your commission payment is overdue. Please pay immediately to continue receiving bookings.',
+      'COMMISSION_OVERDUE',
+    );
+  }
+
+  /**
+   * Admin view: every worker currently flagged as overdue on commission, with
+   * the amount owed and how long they've been late — so an admin can decide
+   * whether to block, warn, or leave alone.
+   *
+   * Re-runs the overdue sweep first, so the list is accurate at the moment the
+   * admin looks at it. That's what keeps this correct without a cron daemon:
+   * flags can go stale between visits, but never while being read.
+   */
+  async getOverdueWorkers() {
+    const { flagged } = await this.flagOverdueWorkers();
+
+    const workers = await this.prisma.workerProfile.findMany({
+      where: { isPaymentOverdue: true },
+      select: {
+        id: true,
+        commissionDueAt: true,
+        city: true,
+        totalJobsCompleted: true,
+        isBonusSuspended: true,
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            phoneNumber: true,
+            isBlocked: true,
+          },
+        },
+      },
+      orderBy: { commissionDueAt: 'asc' }, // longest overdue first
+    });
+
+    const now = Date.now();
+
+    const rows = await Promise.all(
+      workers.map(async (worker) => {
+        const due = await this.getDueStatus(worker.id);
+        const daysOverdue = worker.commissionDueAt
+          ? Math.floor(
+              (now - new Date(worker.commissionDueAt).getTime()) /
+                (1000 * 60 * 60 * 24),
+            )
+          : 0;
+
+        return {
+          workerId: worker.id,
+          userId: worker.user.id,
+          fullName: worker.user.fullName,
+          phoneNumber: worker.user.phoneNumber,
+          city: worker.city,
+          totalJobsCompleted: worker.totalJobsCompleted,
+          amountDue: due.amountDue,
+          commissionDueAt: worker.commissionDueAt,
+          daysOverdue,
+          hasPendingSubmission: due.hasPendingSubmission,
+          isBlocked: worker.user.isBlocked,
+          isBonusSuspended: worker.isBonusSuspended,
+        };
+      }),
+    );
+
+    // A worker who has already submitted proof is awaiting admin review, not
+    // ignoring the bill — surface them separately rather than as a defaulter.
+    return {
+      newlyFlagged: flagged,
+      totalOverdue: rows.length,
+      totalAmountOwed: rows.reduce((sum, row) => sum + row.amountDue, 0),
+      awaitingReview: rows.filter((row) => row.hasPendingSubmission).length,
+      workers: rows,
+    };
+  }
+
+  /**
    * Daily job: flag overdue workers.
    * Called by a scheduler — not exposed via HTTP.
    */

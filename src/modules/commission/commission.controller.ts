@@ -24,7 +24,10 @@ export class CommissionController {
 
   /** GET /commission/worker/:workerId/due */
   @Get('worker/:workerId/due')
-  getDueStatus(@Param('workerId') workerId: string) {
+  async getDueStatus(@Param('workerId') workerId: string) {
+    // Set the overdue flag first so the returned status (and the worker's
+    // banner) reflects reality even if no admin sweep has run.
+    await this.commissionService.flagWorkerIfOverdue(workerId);
     return this.commissionService.getDueStatus(workerId);
   }
 
@@ -52,6 +55,19 @@ export class CommissionController {
   }
 
   // ─── ADMIN ────────────────────────────────────────────────────────────────
+
+  /**
+   * GET /commission/admin/overdue
+   * Workers flagged as overdue on commission, longest-overdue first, so an
+   * admin can review and act (block / warn / leave). Re-runs the overdue sweep
+   * on each call, so the flags are current as of this request.
+   */
+  @Get('admin/overdue')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  getOverdueWorkers() {
+    return this.commissionService.getOverdueWorkers();
+  }
 
   /** GET /commission/admin/pending */
   @Get('admin/pending')
