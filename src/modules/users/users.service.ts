@@ -72,6 +72,74 @@ export class UsersService {
   }
 
   /**
+   * Start the AI-first worker signup: verify the (dummy) OTP and create the
+   * "soft" worker account — a User row with role WORKER and a placeholder name.
+   * Nova fills in the real name and the WorkerProfile afterwards, over chat.
+   *
+   * RESUME CASE: if this phone already has a WORKER account that hasn't
+   * finished onboarding yet (no WorkerProfile row), don't hard-block with a
+   * conflict — the worker may have simply lost their session (closed the tab,
+   * cleared storage, expired token, different device). Verify their password
+   * and log them back into the SAME account with a fresh token instead, so
+   * they can resume Nova rather than being permanently stuck on that phone
+   * number with no way back in.
+   */
+  async startWorkerSignup(dto: {
+    phoneNumber: string;
+    password: string;
+    otp: string;
+  }): Promise<{ user: UserResponseDto; token: string }> {
+    if (dto.otp !== '000000') {
+      throw new UnauthorizedException('Invalid OTP');
+    }
+
+    const existingUser = await this.findUserByPhone(dto.phoneNumber);
+    if (existingUser) {
+      if (existingUser.role !== UserRole.WORKER) {
+        throw new ConflictException(
+          `An account with phone number ${dto.phoneNumber} already exists`,
+        );
+      }
+
+      const existingProfile = await this.prisma.workerProfile.findUnique({
+        where: { userId: existingUser.id },
+      });
+      if (existingProfile) {
+        throw new ConflictException(
+          'This phone number has already completed worker signup. Please log in instead.',
+        );
+      }
+
+      const passwordMatches = await bcrypt.compare(
+        dto.password,
+        existingUser.password,
+      );
+      if (!passwordMatches) {
+        throw new UnauthorizedException(
+          'Incorrect password for this phone number.',
+        );
+      }
+
+      const token = await this.generateToken(existingUser);
+      return { user: this.mapToResponseDto(existingUser), token };
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const user = await this.prisma.user.create({
+      data: {
+        phoneNumber: dto.phoneNumber,
+        password: hashedPassword,
+        fullName: '', // placeholder — Nova sets the real name during onboarding
+        role: UserRole.WORKER,
+        isVerified: false,
+      },
+    });
+
+    const token = await this.generateToken(user);
+    return { user: this.mapToResponseDto(user), token };
+  }
+
+  /**
    * Login user with phone and password
    * Returns user data with JWT token
    */

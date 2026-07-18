@@ -7,10 +7,29 @@ import {
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateWorkerDto } from './dto/create-worker.dto';
+import { CompleteWorkerProfileDto } from './dto/complete-worker-profile.dto';
 import { WorkerResponseDto } from './dto/worker-response.dto';
 import { UpdateOnlineStatusResponseDto } from './dto/update-online-status-response.dto';
-import { UserRole, VerificationStatus } from '@prisma/client';
+import { Prisma, UserRole, VerificationStatus } from '@prisma/client';
 import { WalletService } from '../wallet/wallet.service';
+
+/** The worker-profile fields shared by full signup and AI-completed signup. */
+interface WorkerProfileInput {
+  cnicNumber: string;
+  cnicFrontUrl: string;
+  cnicBackUrl: string;
+  selfieUrl?: string;
+  workPhotosUrls?: string[];
+  homeAddress: string;
+  homeLat: number;
+  homeLng: number;
+  city?: string;
+  experienceYears: number;
+  visitingCharges: number;
+  bio?: string;
+  services: { serviceId: number; price: number }[];
+  portfolioImages?: Array<{ imageUrl: string; description?: string }>;
+}
 
 @Injectable()
 export class WorkersService {
@@ -20,7 +39,8 @@ export class WorkersService {
   ) {}
 
   /**
-   * Register a new worker
+   * Register a new worker (classic single-form signup): creates the User AND the
+   * WorkerProfile together in one transaction.
    */
   async registerWorker(
     createWorkerDto: CreateWorkerDto,
@@ -31,32 +51,8 @@ export class WorkersService {
       fullName,
       profilePicUrl,
       fcmToken,
-      cnicNumber,
-      cnicFrontUrl,
-      cnicBackUrl,
       selfieUrl,
-      workPhotosUrls,
-      homeAddress,
-      homeLat,
-      homeLng,
-      experienceYears,
-      visitingCharges,
-      bio,
-      services: serviceInputs,
-      portfolioImages,
     } = createWorkerDto;
-
-    // Validate latitude and longitude
-    if (homeLat < -90 || homeLat > 90 || homeLng < -180 || homeLng > 180) {
-      throw new BadRequestException('Invalid coordinates provided');
-    }
-
-    // Validate services
-    if (!serviceInputs || serviceInputs.length === 0) {
-      throw new BadRequestException('At least one service must be selected');
-    }
-
-    const serviceIds = serviceInputs.map((s) => s.serviceId);
 
     // Check if user with phone already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -69,39 +65,10 @@ export class WorkersService {
       );
     }
 
-    // Check if CNIC already registered
-    const existingCnic = await this.prisma.workerProfile.findUnique({
-      where: { cnicNumber },
-    });
-
-    if (existingCnic) {
-      throw new ConflictException(
-        `CNIC ${cnicNumber} is already registered as a worker`,
-      );
-    }
-
-    // Verify all services exist
-    const services = await this.prisma.service.findMany({
-      where: { id: { in: serviceIds } },
-    });
-
-    if (services.length !== serviceIds.length) {
-      throw new BadRequestException('Some services do not exist');
-    }
-
-    // Accept both legacy portfolioImages and direct Cloudinary URL arrays from frontend.
-    const normalizedPortfolioImages = [
-      ...(portfolioImages || []),
-      ...(workPhotosUrls || []).map((imageUrl) => ({ imageUrl })),
-    ].filter((portfolio) => Boolean(portfolio?.imageUrl));
-
     try {
-      // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Create user with worker profile in a transaction
-      const result = await this.prisma.$transaction(async (tx) => {
-        // Create user with WORKER role
+      const profileId = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
             phoneNumber,
@@ -114,61 +81,10 @@ export class WorkersService {
           },
         });
 
-        // Create worker profile linked to user
-        const workerProfile = await tx.workerProfile.create({
-          data: {
-            userId: user.id,
-            cnicNumber,
-            cnicFrontUrl,
-            cnicBackUrl,
-            homeAddress,
-            homeLat,
-            homeLng,
-            experienceYears,
-            visitingCharges: visitingCharges.toString(), // Prisma Decimal expects string
-            bio: bio || null,
-            verificationStatus: VerificationStatus.PENDING,
-          },
-        });
-
-        // Create worker services links with price
-        for (const { serviceId, price } of serviceInputs) {
-          await tx.workerService.create({
-            data: {
-              workerId: workerProfile.id,
-              serviceId,
-              price: price.toString(),
-            },
-          });
-        }
-
-        // Create portfolio images if provided
-        if (normalizedPortfolioImages.length > 0) {
-          for (const portfolio of normalizedPortfolioImages) {
-            await tx.workerPortfolio.create({
-              data: {
-                workerId: workerProfile.id,
-                imageUrl: portfolio.imageUrl,
-                // description: portfolio.description || null,
-              },
-            });
-          }
-        }
-
-        return { user, workerProfile };
+        return this.createWorkerProfileForUser(tx, user.id, createWorkerDto);
       });
 
-      // Fetch the complete profile with services and portfolio
-      const completeProfile = await this.prisma.workerProfile.findUnique({
-        where: { id: result.workerProfile.id },
-        include: {
-          user: true,
-          services: { include: { service: true } },
-          portfolio: true,
-        },
-      });
-
-      return this.mapToResponseDto(completeProfile.user, completeProfile);
+      return this.getFullProfile(profileId);
     } catch (error) {
       if (error instanceof ConflictException) throw error;
       if (error instanceof BadRequestException) throw error;
@@ -177,6 +93,169 @@ export class WorkersService {
         'Failed to register worker. Please try again.',
       );
     }
+  }
+
+  /**
+   * Complete an already-created "soft" worker account (from the AI onboarding
+   * flow, POST /users/worker/start) into a full WorkerProfile. The user already
+   * exists and is authenticated; we only add the profile, set the real name, and
+   * submit for verification (PENDING).
+   */
+  async completeWorkerProfile(
+    userId: string,
+    dto: CompleteWorkerProfileDto,
+  ): Promise<WorkerResponseDto> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (user.role !== UserRole.WORKER) {
+      throw new BadRequestException('This account is not a worker account');
+    }
+
+    const existingProfile = await this.prisma.workerProfile.findUnique({
+      where: { userId },
+    });
+    if (existingProfile) {
+      throw new ConflictException('Worker profile already completed');
+    }
+
+    try {
+      const profileId = await this.prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            fullName: dto.fullName,
+            profilePicUrl: user.profilePicUrl || dto.selfieUrl,
+          },
+        });
+
+        return this.createWorkerProfileForUser(tx, userId, dto);
+      });
+
+      return this.getFullProfile(profileId);
+    } catch (error) {
+      if (error instanceof ConflictException) throw error;
+      if (error instanceof BadRequestException) throw error;
+
+      throw new BadRequestException(
+        'Failed to complete worker profile. Please try again.',
+      );
+    }
+  }
+
+  /**
+   * Shared worker-profile creation for an EXISTING user. Validates coordinates,
+   * services and CNIC uniqueness, then creates the WorkerProfile + service links
+   * + portfolio within the given transaction. Returns the new profile id.
+   */
+  private async createWorkerProfileForUser(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    input: WorkerProfileInput,
+  ): Promise<string> {
+    const {
+      cnicNumber,
+      cnicFrontUrl,
+      cnicBackUrl,
+      selfieUrl,
+      workPhotosUrls,
+      homeAddress,
+      homeLat,
+      homeLng,
+      city,
+      experienceYears,
+      visitingCharges,
+      bio,
+      services: serviceInputs,
+      portfolioImages,
+    } = input;
+
+    if (homeLat < -90 || homeLat > 90 || homeLng < -180 || homeLng > 180) {
+      throw new BadRequestException('Invalid coordinates provided');
+    }
+    if (!serviceInputs || serviceInputs.length === 0) {
+      throw new BadRequestException('At least one service must be selected');
+    }
+
+    const serviceIds = serviceInputs.map((s) => s.serviceId);
+
+    const existingCnic = await tx.workerProfile.findUnique({
+      where: { cnicNumber },
+    });
+    if (existingCnic) {
+      throw new ConflictException(
+        `CNIC ${cnicNumber} is already registered as a worker`,
+      );
+    }
+
+    const services = await tx.service.findMany({
+      where: { id: { in: serviceIds } },
+    });
+    if (services.length !== serviceIds.length) {
+      throw new BadRequestException('Some services do not exist');
+    }
+
+    // Accept both legacy portfolioImages and direct Cloudinary URL arrays.
+    const normalizedPortfolioImages = [
+      ...(portfolioImages || []),
+      ...(workPhotosUrls || []).map((imageUrl) => ({ imageUrl })),
+    ].filter((portfolio) => Boolean(portfolio?.imageUrl));
+
+    const workerProfile = await tx.workerProfile.create({
+      data: {
+        userId,
+        cnicNumber,
+        cnicFrontUrl,
+        cnicBackUrl,
+        selfieImageUrl: selfieUrl || null,
+        homeAddress,
+        homeLat,
+        homeLng,
+        city: city || null,
+        experienceYears,
+        visitingCharges: visitingCharges.toString(), // Prisma Decimal expects string
+        bio: bio || null,
+        verificationStatus: VerificationStatus.PENDING,
+      },
+    });
+
+    for (const { serviceId, price } of serviceInputs) {
+      await tx.workerService.create({
+        data: {
+          workerId: workerProfile.id,
+          serviceId,
+          price: price.toString(),
+        },
+      });
+    }
+
+    if (normalizedPortfolioImages.length > 0) {
+      for (const portfolio of normalizedPortfolioImages) {
+        await tx.workerPortfolio.create({
+          data: {
+            workerId: workerProfile.id,
+            imageUrl: portfolio.imageUrl,
+          },
+        });
+      }
+    }
+
+    return workerProfile.id;
+  }
+
+  /** Fetch a worker profile with user, services and portfolio, mapped to DTO. */
+  private async getFullProfile(profileId: string): Promise<WorkerResponseDto> {
+    const completeProfile = await this.prisma.workerProfile.findUnique({
+      where: { id: profileId },
+      include: {
+        user: true,
+        services: { include: { service: true } },
+        portfolio: true,
+      },
+    });
+
+    return this.mapToResponseDto(completeProfile.user, completeProfile);
   }
 
   /**

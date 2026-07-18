@@ -18,6 +18,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { StartWorkerSignupDto } from './dto/start-worker-signup.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -40,6 +41,19 @@ export class UsersController {
     @Body() createUserDto: CreateUserDto,
   ): Promise<{ user: UserResponseDto; token: string }> {
     return this.usersService.register(createUserDto);
+  }
+
+  /**
+   * POST /users/worker/start
+   * Start the AI-first worker signup: phone + password + OTP creates a "soft"
+   * worker account (public — no auth required). Nova completes it via chat.
+   */
+  @Post('worker/start')
+  @HttpCode(201)
+  async startWorkerSignup(
+    @Body() dto: StartWorkerSignupDto,
+  ): Promise<{ user: UserResponseDto; token: string }> {
+    return this.usersService.startWorkerSignup(dto);
   }
 
   /**
