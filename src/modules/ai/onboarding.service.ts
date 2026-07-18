@@ -37,6 +37,8 @@ import { ToolDeps } from './tools/tool-types';
  * unfinished step drives what happens next.
  */
 type OnboardingStep = {
+  /** Stable key for referencing a step from code (label text may be reworded). */
+  id: string;
   label: string;
   ask: string;
   capture?: OnboardingAwaiting; // undefined => plain text step
@@ -45,26 +47,31 @@ type OnboardingStep = {
 
 const STEPS: OnboardingStep[] = [
   {
+    id: 'fullName',
     label: 'your full name',
     ask: 'Aap ka poora naam kya hai?',
     done: (p) => !!p.fullName,
   },
   {
+    id: 'services',
     label: 'the work you do and a price for each',
     ask: 'Aap kaun kaun se kaam karte hain, aur har kaam ki price (PKR) kya hai?',
     done: (p) => !!p.services?.length && p.services.every((s) => s.price > 0),
   },
   {
+    id: 'experienceYears',
     label: 'your years of experience',
     ask: 'Aap ko kitne saal ka tajurba hai?',
     done: (p) => typeof p.experienceYears === 'number',
   },
   {
+    id: 'visitingCharges',
     label: 'your visiting charge',
     ask: 'Aap ki visiting charge (site pe aane ki fixed fees) kitni hai?',
     done: (p) => typeof p.visitingCharges === 'number' && p.visitingCharges > 0,
   },
   {
+    id: 'location',
     label: 'your work location',
     ask: 'Ab apni location share karein — neeche jo button aaye ga use dabayein.',
     capture: 'location',
@@ -74,24 +81,28 @@ const STEPS: OnboardingStep[] = [
       !!p.homeAddress,
   },
   {
+    id: 'cnic',
     label: 'your CNIC number and its front & back photos',
     ask: 'Apna CNIC number aur CNIC ki dono taraf ki tasveerein — button se lagayein.',
     capture: 'cnic',
     done: (p) => !!p.cnicNumber && !!p.cnicFrontUrl && !!p.cnicBackUrl,
   },
   {
+    id: 'selfie',
     label: 'a selfie',
     ask: 'Ek selfie le lein — camera button dabayein.',
     capture: 'selfie',
     done: (p) => !!p.selfieUrl,
   },
   {
+    id: 'workPhotos',
     label: 'a few photos of your work',
     ask: 'Apne kaam ki 1-2 tasveerein lagayein — button se.',
     capture: 'workPhotos',
     done: (p) => !!p.workPhotosUrls?.length,
   },
   {
+    id: 'bio',
     label: 'a short bio (just tell me about your work)',
     ask: 'Thoda apne kaam ke baare mein batayein — main aap ke liye bio likh dunga.',
     done: (p) => !!p.bio,
@@ -441,15 +452,52 @@ export class OnboardingService {
     );
   }
 
-  /** A short system note so the model knows what's already collected. */
+  /**
+   * The per-turn system note. This is the model's ONLY source of truth for what
+   * to ask next — it must never infer the next question from its own judgment.
+   * Gives the full remaining order (for context) plus ONE explicit next action,
+   * computed from the same ordered checklist that drives `awaiting`/`complete`,
+   * so the model can't drift ahead (e.g. asking about experience while a
+   * service still has no price).
+   */
   private profileContext(profile: OnboardingProfileDto): string {
-    const missing = this.missingFields(profile);
+    const remaining = this.missingFieldDefs(profile);
+    const header = `Current collected profile (do NOT re-ask what is already filled):\n${JSON.stringify(profile)}\n`;
+
+    if (!remaining.length) {
+      return (
+        header +
+        'Everything required is collected. Summarise the profile in a few ' +
+        'simple bullet points, tell the worker it looks great, and that it has ' +
+        'been submitted for verification.'
+      );
+    }
+
+    const next = remaining[0];
+    const order = remaining.map((s) => s.label).join(', ');
+    const nextAction = next.capture
+      ? 'This is a BUTTON step, not typed text. Just warmly tell the worker to ' +
+        'use the button that will appear below the chat. Do NOT call ' +
+        'record_worker_details for it — the app saves it directly.'
+      : `Ask for it now. Suggested phrasing (adapt the tone, keep the content): "${next.ask}"`;
+
+    let servicesNote = '';
+    if (next.id === 'services') {
+      const pending = (profile.services ?? [])
+        .filter((s) => !(s.price > 0))
+        .map((s) => s.name);
+      if (pending.length) {
+        servicesNote =
+          `\nServices still needing a price: ${pending.join(', ')}. Ask for ` +
+          `"${pending[0]}"'s price now, and only that one.`;
+      }
+    }
+
     return (
-      `Current collected profile (do NOT re-ask what is already filled):\n` +
-      `${JSON.stringify(profile)}\n` +
-      (missing.length
-        ? `Still needed: ${missing.join(', ')}. Ask for the next missing one.`
-        : `Everything is collected. Summarise the profile and tell them the last step is photos + password.`)
+      header +
+      `Still needed, IN ORDER: ${order}.\n` +
+      `THE VERY NEXT THING TO ASK ABOUT: "${next.label}". ${nextAction}${servicesNote}\n` +
+      `Do not ask about anything later in this order until this one is done.`
     );
   }
 
