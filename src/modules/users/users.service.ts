@@ -75,6 +75,14 @@ export class UsersService {
    * Start the AI-first worker signup: verify the (dummy) OTP and create the
    * "soft" worker account — a User row with role WORKER and a placeholder name.
    * Nova fills in the real name and the WorkerProfile afterwards, over chat.
+   *
+   * RESUME CASE: if this phone already has a WORKER account that hasn't
+   * finished onboarding yet (no WorkerProfile row), don't hard-block with a
+   * conflict — the worker may have simply lost their session (closed the tab,
+   * cleared storage, expired token, different device). Verify their password
+   * and log them back into the SAME account with a fresh token instead, so
+   * they can resume Nova rather than being permanently stuck on that phone
+   * number with no way back in.
    */
   async startWorkerSignup(dto: {
     phoneNumber: string;
@@ -87,9 +95,33 @@ export class UsersService {
 
     const existingUser = await this.findUserByPhone(dto.phoneNumber);
     if (existingUser) {
-      throw new ConflictException(
-        `An account with phone number ${dto.phoneNumber} already exists`,
+      if (existingUser.role !== UserRole.WORKER) {
+        throw new ConflictException(
+          `An account with phone number ${dto.phoneNumber} already exists`,
+        );
+      }
+
+      const existingProfile = await this.prisma.workerProfile.findUnique({
+        where: { userId: existingUser.id },
+      });
+      if (existingProfile) {
+        throw new ConflictException(
+          'This phone number has already completed worker signup. Please log in instead.',
+        );
+      }
+
+      const passwordMatches = await bcrypt.compare(
+        dto.password,
+        existingUser.password,
       );
+      if (!passwordMatches) {
+        throw new UnauthorizedException(
+          'Incorrect password for this phone number.',
+        );
+      }
+
+      const token = await this.generateToken(existingUser);
+      return { user: this.mapToResponseDto(existingUser), token };
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
