@@ -12,6 +12,7 @@ import { WorkerResponseDto } from './dto/worker-response.dto';
 import { UpdateOnlineStatusResponseDto } from './dto/update-online-status-response.dto';
 import { Prisma, UserRole, VerificationStatus } from '@prisma/client';
 import { WalletService } from '../wallet/wallet.service';
+import { getWorkerDistancesWithinRadius } from '../../shared/utils/geo.util';
 
 /** The worker-profile fields shared by full signup and AI-completed signup. */
 interface WorkerProfileInput {
@@ -415,6 +416,9 @@ export class WorkersService {
     take: number = 10,
     serviceId?: number,
     categoryId?: string,
+    lat?: number,
+    lng?: number,
+    radiusKm?: number,
   ): Promise<WorkerResponseDto[]> {
     const where: any = {
       verificationStatus: VerificationStatus.APPROVED,
@@ -436,6 +440,46 @@ export class WorkersService {
       };
     }
 
+    // Nearby search: when the customer shares their location, restrict results to
+    // workers within `radiusKm` and sort by distance instead of ranking score.
+    if (
+      typeof lat === 'number' &&
+      typeof lng === 'number' &&
+      typeof radiusKm === 'number' &&
+      radiusKm > 0
+    ) {
+      const distanceById = await getWorkerDistancesWithinRadius(
+        this.prisma,
+        lat,
+        lng,
+        radiusKm,
+      );
+
+      if (distanceById.size === 0) {
+        return [];
+      }
+
+      where.id = { in: Array.from(distanceById.keys()) };
+
+      const workers = await this.prisma.workerProfile.findMany({
+        where,
+        include: {
+          user: true,
+          services: { include: { service: true } },
+          portfolio: true,
+        },
+      });
+
+      return workers
+        .map((worker) => {
+          const dto = this.mapToResponseDto(worker.user, worker);
+          dto.distanceKm = distanceById.get(worker.id);
+          return dto;
+        })
+        .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity))
+        .slice(skip, skip + take);
+    }
+
     const workers = await this.prisma.workerProfile.findMany({
       where,
       include: {
@@ -451,6 +495,7 @@ export class WorkersService {
       .map((worker) => this.mapToResponseDto(worker.user, worker))
       .sort((a, b) => (b.rankingScore ?? 0) - (a.rankingScore ?? 0));
   }
+
 
   /**
    * Update worker online status
@@ -501,7 +546,12 @@ export class WorkersService {
       'ACCEPTED',
       'IN_PROGRESS',
     ];
-    const pastStatuses = ['COMPLETED', 'CANCELLED', 'DISPUTED'];
+    const pastStatuses = [
+      'COMPLETED',
+      'CANCELLED',
+      'DISPUTED',
+      'DECLINED_AFTER_VISIT',
+    ];
     const statusList = status === 'past' ? pastStatuses : activeStatuses;
 
     const bookings = await this.prisma.booking.findMany({

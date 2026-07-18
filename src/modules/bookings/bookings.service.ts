@@ -92,6 +92,9 @@ export class BookingsService {
           jobLng,
           imageUrls: imageUrls ?? [],
           scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+          // Freeze the worker's call-out fee onto the booking — a later rate
+          // change must not retroactively alter this booking.
+          visitingCharge: worker.visitingCharges ?? 0,
           status:
             effectivePrice && effectivePrice > 0
               ? BookingStatus.NEGOTIATION
@@ -371,6 +374,9 @@ export class BookingsService {
           completedAt: new Date(),
           commissionRate: rate,
           commissionAmount: commission,
+          // The job went ahead, so the call-out fee is waived. Recorded
+          // explicitly so reporting can tell "waived" from "never applied".
+          visitingChargeWaived: true,
         },
       });
 
@@ -439,6 +445,9 @@ export class BookingsService {
       payload,
     );
 
+    // Terminal state — stop live tracking and clear stale coordinates.
+    await this.realtimeGateway.clearLiveLocation(bookingId, booking.worker.id);
+
     return this.getBookingById(bookingId);
   }
 
@@ -503,6 +512,15 @@ export class BookingsService {
       );
     }
 
+    // Once the worker has arrived, the customer can no longer exit for free —
+    // otherwise the visiting-charge policy is trivially bypassed by cancelling
+    // instead of declining.
+    if (booking.arrivedAt && cancelledByUserId === booking.customerId) {
+      throw new BadRequestException(
+        'Worker has already arrived — decline the quote instead; the visiting charge applies',
+      );
+    }
+
     // Track worker-initiated cancellations (feeds completion/cancellation rate).
     if (cancelledByUserId && cancelledByUserId === booking.worker.userId) {
       await this.prisma.workerProfile.update({
@@ -511,7 +529,152 @@ export class BookingsService {
       });
     }
 
+    // Terminal state — stop live tracking and clear stale coordinates.
+    await this.realtimeGateway.clearLiveLocation(bookingId, booking.worker.id);
+
     return this.updateBookingStatus(bookingId, BookingStatus.CANCELLED);
+  }
+
+  /**
+   * Worker marks themselves as arrived at the job site. This is the pivot point
+   * of the visiting-charge policy: before it, customer cancellation is free;
+   * after it, declining the quote makes the visiting charge payable.
+   */
+  async markArrived(bookingId: string, userId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { worker: { select: { userId: true } } },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+    if (booking.worker.userId !== userId) {
+      throw new ForbiddenException(
+        'Only the assigned worker can mark arrival',
+      );
+    }
+    if (booking.status !== BookingStatus.ACCEPTED) {
+      throw new BadRequestException(
+        'Arrival can only be marked on an accepted booking',
+      );
+    }
+    if (booking.arrivedAt) {
+      return booking; // idempotent — a double tap is not an error
+    }
+
+    const updated = await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: { arrivedAt: new Date() },
+    });
+
+    await this.notificationsService.createNotification(
+      booking.customerId,
+      'Worker has arrived',
+      'Your worker has arrived and will inspect the job now.',
+      'BOOKING_UPDATE',
+    );
+
+    const payload = { bookingId, arrivedAt: updated.arrivedAt };
+    this.realtimeGateway.emitToUser(
+      booking.customerId,
+      'worker_arrived',
+      payload,
+    );
+
+    return updated;
+  }
+
+  /**
+   * Customer declines the quoted work price after the worker has inspected.
+   *
+   * Terminal state: no work happens and the visiting charge becomes payable to
+   * the worker. If the worker never marked arrival this is treated as an
+   * ordinary free cancellation instead.
+   */
+  async declineAfterVisit(
+    bookingId: string,
+    userId: string,
+    reason?: string,
+  ) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { worker: { select: { id: true, userId: true } } },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking with ID ${bookingId} not found`);
+    }
+    if (booking.customerId !== userId) {
+      throw new ForbiddenException('Only the customer can decline the quote');
+    }
+    if (booking.status === BookingStatus.DECLINED_AFTER_VISIT) {
+      return booking; // idempotent — never credit the charge twice
+    }
+    if (!booking.arrivedAt) {
+      // Worker never arrived, so nothing is owed — this is a normal cancellation.
+      return this.cancelBooking(bookingId, userId);
+    }
+
+    const charge = Number(booking.visitingCharge ?? 0);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.booking.update({
+        where: { id: bookingId },
+        data: {
+          status: BookingStatus.DECLINED_AFTER_VISIT,
+          declinedAt: new Date(),
+          declineReason: reason ?? null,
+          visitingChargeWaived: false,
+        },
+      });
+
+      if (charge > 0) {
+        await this.walletService.adjust(
+          {
+            workerId: booking.worker.id,
+            type: WalletTxnType.VISITING_CHARGE_CREDIT,
+            amount: charge,
+            bookingId,
+            description:
+              'Visiting charge — customer declined the quote after inspection',
+          },
+          tx,
+        );
+      }
+
+      return result;
+    });
+
+    await this.notificationsService.createNotification(
+      booking.worker.userId,
+      'Quote declined',
+      charge > 0
+        ? `The customer declined the quote. Rs. ${charge} visiting charge has been credited to your wallet.`
+        : 'The customer declined the quote.',
+      'BOOKING_UPDATE',
+    );
+
+    // Terminal state — stop live tracking and clear stale coordinates.
+    await this.realtimeGateway.clearLiveLocation(bookingId, booking.worker.id);
+
+    const payload = {
+      bookingId,
+      status: BookingStatus.DECLINED_AFTER_VISIT,
+      visitingCharge: charge,
+    };
+    this.realtimeGateway.emitToUser(
+      booking.customerId,
+      'booking_status_updated',
+      payload,
+    );
+    this.realtimeGateway.emitToUser(
+      booking.worker.userId,
+      'booking_status_updated',
+      payload,
+    );
+
+    return updated;
   }
 
   async getProposals(bookingId: string) {

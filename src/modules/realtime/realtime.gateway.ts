@@ -46,6 +46,8 @@ export class RealtimeGateway
   private userSockets = new Map<string, Set<string>>();
   // Track socket to user: socketId -> userId
   private socketUsers = new Map<string, string>();
+  // Throttle DB writes for live location: bookingId -> last persisted timestamp
+  private lastLocationWrite = new Map<string, number>();
 
   constructor(
     private jwtService: JwtService,
@@ -175,6 +177,111 @@ export class RealtimeGateway
   ) {
     if (data.bookingId) {
       client.leave(`booking:${data.bookingId}`);
+    }
+  }
+
+  // ==================== LIVE LOCATION ====================
+
+  /**
+   * Worker broadcasts their live position during an active booking.
+   * Client emits: 'update_location' { bookingId, lat, lng, heading?, speed? }
+   *
+   * Only the assigned worker may emit, and only while the booking is ACCEPTED
+   * or IN_PROGRESS. Position is broadcast to the booking room on every tick but
+   * persisted at most once every LOCATION_WRITE_INTERVAL_MS, so a 5-second GPS
+   * cadence doesn't become a 5-second write cadence.
+   */
+  @SubscribeMessage('update_location')
+  async handleUpdateLocation(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: {
+      bookingId: string;
+      lat: number;
+      lng: number;
+      heading?: number;
+      speed?: number;
+    },
+  ) {
+    const LOCATION_WRITE_INTERVAL_MS = 15_000;
+    const userId = client.data.userId;
+
+    if (!userId || !data?.bookingId) return;
+    if (typeof data.lat !== 'number' || typeof data.lng !== 'number') return;
+    if (data.lat < -90 || data.lat > 90 || data.lng < -180 || data.lng > 180) {
+      return;
+    }
+
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: data.bookingId },
+      include: { worker: { select: { id: true, userId: true } } },
+    });
+
+    if (!booking) return;
+
+    // Only the assigned worker may broadcast their position.
+    if (booking.worker.userId !== userId) {
+      client.emit('error', {
+        message: 'Only the assigned worker can share location',
+      });
+      return;
+    }
+
+    // Only while the job is actually live.
+    if (booking.status !== 'ACCEPTED' && booking.status !== 'IN_PROGRESS') {
+      client.emit('tracking_stopped', { bookingId: data.bookingId });
+      return;
+    }
+
+    const payload = {
+      bookingId: data.bookingId,
+      lat: data.lat,
+      lng: data.lng,
+      heading: data.heading ?? null,
+      speed: data.speed ?? null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Broadcast to the customer immediately, every tick.
+    client
+      .to(`booking:${data.bookingId}`)
+      .emit('worker_location_updated', payload);
+
+    // Persist at a slower cadence.
+    const now = Date.now();
+    const lastWrite = this.lastLocationWrite.get(data.bookingId) ?? 0;
+    if (now - lastWrite >= LOCATION_WRITE_INTERVAL_MS) {
+      this.lastLocationWrite.set(data.bookingId, now);
+      try {
+        await this.prisma.workerProfile.update({
+          where: { id: booking.worker.id },
+          data: { liveLat: data.lat, liveLng: data.lng },
+        });
+      } catch (error: any) {
+        this.logger.warn(
+          `Failed to persist live location for booking ${data.bookingId}: ${error?.message}`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Clear a booking's live-tracking state. Called when a booking reaches a
+   * terminal status so stale coordinates aren't left behind.
+   */
+  async clearLiveLocation(bookingId: string, workerProfileId: string) {
+    this.lastLocationWrite.delete(bookingId);
+    this.server
+      .to(`booking:${bookingId}`)
+      .emit('tracking_stopped', { bookingId });
+
+    try {
+      await this.prisma.workerProfile.update({
+        where: { id: workerProfileId },
+        data: { liveLat: null, liveLng: null },
+      });
+    } catch (error: any) {
+      this.logger.warn(`Failed to clear live location: ${error?.message}`);
     }
   }
 

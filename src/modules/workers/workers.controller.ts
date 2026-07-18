@@ -86,12 +86,18 @@ export class WorkersController {
     @Query('take') take: string = '10',
     @Query('serviceId') serviceId?: string,
     @Query('categoryId') categoryId?: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
+    @Query('radiusKm') radiusKm?: string,
   ): Promise<WorkerResponseDto[]> {
     return this.workersService.getVerifiedWorkers(
       parseInt(skip),
       parseInt(take),
       serviceId ? parseInt(serviceId) : undefined,
       categoryId,
+      lat ? parseFloat(lat) : undefined,
+      lng ? parseFloat(lng) : undefined,
+      radiusKm ? parseFloat(radiusKm) : undefined,
     );
   }
 

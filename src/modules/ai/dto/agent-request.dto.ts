@@ -1,9 +1,12 @@
 import {
   IsArray,
   IsIn,
+  IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -38,4 +41,21 @@ export class AgentRequestDto {
   @IsOptional()
   @IsString()
   conversationId?: string;
+
+  /**
+   * Customer's current coordinates from the browser, when they've allowed
+   * location. Supplied by the client rather than the model, so worker searches
+   * can be filtered by real distance instead of a free-text city guess.
+   */
+  @IsOptional()
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  lat?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  lng?: number;
 }

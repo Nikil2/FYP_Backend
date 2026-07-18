@@ -42,6 +42,9 @@ export class WorkerResponseDto {
   currentTier: WorkerTier;
   rankingScore?: number;
 
+  // Distance from the customer's location in km (only set for nearby searches)
+  distanceKm?: number;
+
   // Services
   services: ServiceDto[];
 
