@@ -189,6 +189,41 @@ export class BookingsController {
   }
 
   /**
+   * PATCH /bookings/:id/arrived
+   * Worker marks arrival at the job site. After this point the customer can no
+   * longer cancel for free — declining makes the visiting charge payable.
+   */
+  @Patch(':id/arrived')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.WORKER)
+  async markArrived(
+    @Param('id') bookingId: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.bookingsService.markArrived(bookingId, userId);
+  }
+
+  /**
+   * POST /bookings/:id/decline
+   * Customer declines the quoted price after the worker has inspected.
+   * Terminal — the worker is credited the visiting charge.
+   */
+  @Post(':id/decline')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.CUSTOMER)
+  async declineAfterVisit(
+    @Param('id') bookingId: string,
+    @CurrentUser('sub') userId: string,
+    @Body() body: { reason?: string },
+  ) {
+    return this.bookingsService.declineAfterVisit(
+      bookingId,
+      userId,
+      body?.reason,
+    );
+  }
+
+  /**
    * GET /bookings/:id/proposals
    * List all price proposals for a booking
    */

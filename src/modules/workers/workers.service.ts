@@ -415,6 +415,9 @@ export class WorkersService {
     take: number = 10,
     serviceId?: number,
     categoryId?: string,
+    lat?: number,
+    lng?: number,
+    radiusKm?: number,
   ): Promise<WorkerResponseDto[]> {
     const where: any = {
       verificationStatus: VerificationStatus.APPROVED,
@@ -436,6 +439,45 @@ export class WorkersService {
       };
     }
 
+    // Nearby search: when the customer shares their location, restrict results to
+    // workers within `radiusKm` and sort by distance instead of ranking score.
+    if (
+      typeof lat === 'number' &&
+      typeof lng === 'number' &&
+      typeof radiusKm === 'number' &&
+      radiusKm > 0
+    ) {
+      const distanceById = await this.getWorkerDistancesWithinRadius(
+        lat,
+        lng,
+        radiusKm,
+      );
+
+      if (distanceById.size === 0) {
+        return [];
+      }
+
+      where.id = { in: Array.from(distanceById.keys()) };
+
+      const workers = await this.prisma.workerProfile.findMany({
+        where,
+        include: {
+          user: true,
+          services: { include: { service: true } },
+          portfolio: true,
+        },
+      });
+
+      return workers
+        .map((worker) => {
+          const dto = this.mapToResponseDto(worker.user, worker);
+          dto.distanceKm = distanceById.get(worker.id);
+          return dto;
+        })
+        .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity))
+        .slice(skip, skip + take);
+    }
+
     const workers = await this.prisma.workerProfile.findMany({
       where,
       include: {
@@ -450,6 +492,57 @@ export class WorkersService {
     return workers
       .map((worker) => this.mapToResponseDto(worker.user, worker))
       .sort((a, b) => (b.rankingScore ?? 0) - (a.rankingScore ?? 0));
+  }
+
+  /**
+   * Return a map of workerProfileId -> distanceKm for every APPROVED worker
+   * whose home location falls within `radiusKm` of (lat, lng).
+   *
+   * Uses a cheap bounding-box pre-filter (indexable) followed by the Haversine
+   * great-circle formula for exact distance. The acos argument is clamped to
+   * [-1, 1] to avoid NaN from floating-point rounding on near-identical points.
+   */
+  private async getWorkerDistancesWithinRadius(
+    lat: number,
+    lng: number,
+    radiusKm: number,
+  ): Promise<Map<string, number>> {
+    const EARTH_RADIUS_KM = 6371;
+    const KM_PER_DEG_LAT = 111.045;
+    const latDelta = radiusKm / KM_PER_DEG_LAT;
+    // Guard against the cos() term collapsing to 0 near the poles.
+    const lngDelta =
+      radiusKm /
+      (KM_PER_DEG_LAT * Math.max(Math.cos((lat * Math.PI) / 180), 0.01));
+
+    const rows = await this.prisma.$queryRaw<
+      { id: string; distance_km: number }[]
+    >(Prisma.sql`
+      SELECT id, distance_km FROM (
+        SELECT
+          id,
+          ${EARTH_RADIUS_KM} * acos(
+            LEAST(1, GREATEST(-1,
+              cos(radians(${lat})) * cos(radians("homeLat")) *
+              cos(radians("homeLng") - radians(${lng})) +
+              sin(radians(${lat})) * sin(radians("homeLat"))
+            ))
+          ) AS distance_km
+        FROM "WorkerProfile"
+        WHERE "verificationStatus" = 'APPROVED'
+          AND "homeLat" BETWEEN ${lat - latDelta} AND ${lat + latDelta}
+          AND "homeLng" BETWEEN ${lng - lngDelta} AND ${lng + lngDelta}
+      ) AS candidates
+      WHERE distance_km <= ${radiusKm}
+      ORDER BY distance_km ASC
+    `);
+
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        Math.round(Number(row.distance_km) * 10) / 10,
+      ]),
+    );
   }
 
   /**
@@ -501,7 +594,12 @@ export class WorkersService {
       'ACCEPTED',
       'IN_PROGRESS',
     ];
-    const pastStatuses = ['COMPLETED', 'CANCELLED', 'DISPUTED'];
+    const pastStatuses = [
+      'COMPLETED',
+      'CANCELLED',
+      'DISPUTED',
+      'DECLINED_AFTER_VISIT',
+    ];
     const statusList = status === 'past' ? pastStatuses : activeStatuses;
 
     const bookings = await this.prisma.booking.findMany({
