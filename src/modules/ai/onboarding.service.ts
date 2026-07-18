@@ -14,7 +14,10 @@ import {
   ToolDefinition,
 } from './providers/llm-provider.interface';
 import { WORKER_ONBOARDING_PROMPT } from './prompts/onboarding-prompt';
-import { OnboardRequestDto, OnboardingProfileDto } from './dto/onboard-request.dto';
+import {
+  OnboardRequestDto,
+  OnboardingProfileDto,
+} from './dto/onboard-request.dto';
 import {
   OnboardResponseDto,
   OnboardingAwaiting,
@@ -144,7 +147,11 @@ export class OnboardingService {
 
         messages.push(result.assistantMessage);
         for (const call of result.toolCalls) {
-          const data = await this.dispatch(call.name, call.arguments ?? {}, profile);
+          const data = await this.dispatch(
+            call.name,
+            call.arguments ?? {},
+            profile,
+          );
           messages.push({
             role: 'tool',
             tool_call_id: call.id,
@@ -306,7 +313,8 @@ export class OnboardingService {
         }
         const existing = profile.services.find((s) => s.serviceId === match.id);
         if (existing) {
-          if (typeof incoming.price === 'number') existing.price = incoming.price;
+          if (typeof incoming.price === 'number')
+            existing.price = incoming.price;
         } else {
           profile.services.push({
             serviceId: match.id,
@@ -336,7 +344,9 @@ export class OnboardingService {
       limit: 25,
     });
 
-    const visiting = candidates.map((w) => w.visitingCharges).filter((n) => n > 0);
+    const visiting = candidates
+      .map((w) => w.visitingCharges)
+      .filter((n) => n > 0);
     const servicePrices = candidates
       .flatMap((w) => w.services)
       .filter((s) => s.name.toLowerCase().includes(args.service.toLowerCase()))
@@ -454,7 +464,9 @@ export class OnboardingService {
  * whole services list is never silently dropped.
  */
 function normalizeServices(
-  raw: (string | { name?: string; service?: string; price?: number })[] | undefined,
+  raw:
+    | (string | { name?: string; service?: string; price?: number })[]
+    | undefined,
 ): { name: string; price?: number }[] {
   if (!raw?.length) return [];
   const out: { name: string; price?: number }[] = [];
@@ -494,7 +506,9 @@ function resolveService(
   return partial ? { id: partial.id, name: partial.name } : null;
 }
 
-function range(values: number[]): { min: number; avg: number; max: number } | null {
+function range(
+  values: number[],
+): { min: number; avg: number; max: number } | null {
   if (!values.length) return null;
   const sum = values.reduce((a, b) => a + b, 0);
   return {
@@ -555,7 +569,10 @@ const TOOL_DEFS: ToolDefinition[] = [
             type: 'number',
             description: 'Fixed visiting/call-out charge in PKR.',
           },
-          homeAddress: { type: 'string', description: 'Area / street address.' },
+          homeAddress: {
+            type: 'string',
+            description: 'Area / street address.',
+          },
           city: { type: 'string', description: 'City in Pakistan.' },
           bio: {
             type: 'string',

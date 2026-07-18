@@ -1,6 +1,5 @@
 import {
   IsArray,
-  IsIn,
   IsLatitude,
   IsLongitude,
   IsNumber,

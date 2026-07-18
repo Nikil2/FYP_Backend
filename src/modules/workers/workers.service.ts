@@ -45,8 +45,14 @@ export class WorkersService {
   async registerWorker(
     createWorkerDto: CreateWorkerDto,
   ): Promise<WorkerResponseDto> {
-    const { phoneNumber, password, fullName, profilePicUrl, fcmToken, selfieUrl } =
-      createWorkerDto;
+    const {
+      phoneNumber,
+      password,
+      fullName,
+      profilePicUrl,
+      fcmToken,
+      selfieUrl,
+    } = createWorkerDto;
 
     // Check if user with phone already exists
     const existingUser = await this.prisma.user.findUnique({

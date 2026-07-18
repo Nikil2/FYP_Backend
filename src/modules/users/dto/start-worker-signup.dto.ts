@@ -1,4 +1,9 @@
-import { IsNotEmpty, IsPhoneNumber, IsString, MinLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsPhoneNumber,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 /**
  * Phone + password + OTP collected on the single manual step of the AI-first
