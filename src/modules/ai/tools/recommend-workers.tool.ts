@@ -18,13 +18,16 @@ export async function recommendWorkers(
     city: args.city,
     maxBudget: args.budget,
     limit: 3,
+    location: deps.customerLocation,
   });
 
   if (workers.length === 0) {
     return {
       data: {
         count: 0,
-        note: 'No verified workers matched. Suggest another city or higher budget.',
+        note: deps.customerLocation
+          ? 'No verified workers nearby. Offer to widen the search area.'
+          : 'No verified workers matched. Suggest another city or higher budget.',
       },
       workers: [],
     };

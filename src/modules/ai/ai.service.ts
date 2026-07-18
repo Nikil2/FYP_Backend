@@ -71,7 +71,17 @@ export class AiService {
 
       for (const call of result.toolCalls) {
         lastToolUsed = call.name;
-        const toolResult = await this.toolExecutor.run(call.name, call.arguments);
+        const toolResult = await this.toolExecutor.run(
+          call.name,
+          call.arguments,
+          {
+            // Comes from the customer's device, not the model.
+            customerLocation:
+              typeof dto.lat === 'number' && typeof dto.lng === 'number'
+                ? { lat: dto.lat, lng: dto.lng }
+                : undefined,
+          },
+        );
 
         if (toolResult.workers?.length) {
           collectedWorkers = toolResult.workers; // latest search/recommend wins
