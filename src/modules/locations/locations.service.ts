@@ -30,7 +30,13 @@ export class LocationsService {
     }
 
     return this.prisma.savedLocation.create({
-      data: { userId, address: dto.address, lat: dto.lat, lng: dto.lng },
+      data: {
+        userId,
+        address: dto.address,
+        lat: dto.lat,
+        lng: dto.lng,
+        label: dto.label ?? null,
+      },
     });
   }
 
