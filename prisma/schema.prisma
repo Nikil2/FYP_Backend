@@ -229,12 +229,17 @@ model Notification {
 }
 
 model SavedLocation {
-  id      String @id @default(uuid())
-  userId  String
-  address String
-  lat     Float
-  lng     Float
-  user    User   @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid())
+  userId    String
+  address   String
+  lat       Float
+  lng       Float
+  /// "Home", "Work", "Other" — chosen by the customer when saving.
+  label     String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model WorkerPortfolio {
